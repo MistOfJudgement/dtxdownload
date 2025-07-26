@@ -2,6 +2,18 @@ I want this to be an extension that grabs the download links to various simfiles
 Rethinking this to be a database of sorts that queries every source and lets me sort through and pick out which files I want.
 So rather than an extension, its basically just bridge but for dtxmania.
 
+# Architecture
+
+I originally implemented this somewhat haphazardly and without too much adherence to a specific architecture or standards. I would like to rewrite it to be easier to read and maintain.
+
+The current structure is in 3 parts.
+1. A web scraper that goes through the blog posts and gets information about each simfile and stores it in a database.
+2. A web interface that allows users to search through the database and select simfiles to download.
+3. A downloader that takes the selected simfiles and downloads them before unzipping them into the dtxmania folder.
+
+The main thing I noticed is a regression in the downloader where there are additional prompts before downloading. I need a way to determine how to download a given file cleanly.
+----
+
 This discord message has the list of creators (https://discord.com/channels/427808294485098507/821077464356225103/821078170806517762)
 the main one I would want to scrape for data is ApprovedDTX cause they're the one I know best
 

@@ -39,10 +39,10 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
         this.updateProgress(pageCount, maxPages, charts.length);
         
         try {
-          const pageCharts = await this.scrapePage(currentUrl, source);
+          const { pageCharts, html } = await this.scrapePageWithHtml(currentUrl, source);
           charts.push(...pageCharts);
           
-          const nextUrl = await this.getNextPageUrl(currentUrl, '');
+          const nextUrl = await this.getNextPageUrl(currentUrl, html);
           if (!nextUrl) {
             break;
           }
@@ -96,6 +96,28 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
     }
     
     return charts;
+  }
+
+  protected async scrapePageWithHtml(url: string, source: Source): Promise<{ pageCharts: IChart[], html: string }> {
+    const response = await this.httpClient.get(url, source.customHeaders);
+    const $ = cheerio.load(response.body);
+    
+    const chartElements = this.getChartElements($);
+    const charts: IChart[] = [];
+    
+    for (const element of chartElements) {
+      try {
+        const chart = await this.extractChartFromElement(element);
+        if (chart && this.validateChart(chart)) {
+          charts.push(chart);
+        }
+      } catch (error) {
+        // Log individual chart extraction errors but continue processing
+        console.warn(`Failed to extract chart from element: ${error}`);
+      }
+    }
+    
+    return { pageCharts: charts, html: response.body };
   }
 
   protected abstract getChartElements($: cheerio.Root): cheerio.Element[];

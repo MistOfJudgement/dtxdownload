@@ -66,6 +66,41 @@ export interface IChartFilters {
 }
 
 /**
+ * Options for querying charts from database
+ */
+export interface ChartQueryOptions {
+  /** Filter by source */
+  source?: string;
+  
+  /** Filter by artist (partial match) */
+  artist?: string;
+  
+  /** Filter by title (partial match) */
+  title?: string;
+  
+  /** Filter by minimum BPM */
+  minBpm?: number;
+  
+  /** Filter by maximum BPM */
+  maxBpm?: number;
+  
+  /** Filter by tags */
+  tags?: string[];
+  
+  /** Sort field */
+  sortBy?: 'title' | 'artist' | 'bpm' | 'createdAt' | 'updatedAt';
+  
+  /** Sort order */
+  sortOrder?: 'ASC' | 'DESC';
+  
+  /** Pagination offset */
+  offset?: number;
+  
+  /** Pagination limit */
+  limit?: number;
+}
+
+/**
  * Options for scraping operations
  */
 export interface IScrapeOptions {

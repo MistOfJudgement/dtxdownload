@@ -4,10 +4,16 @@
 
 import { IScrapingService, IScrapingStrategy, Source, ScrapingResult, ScrapingOptions } from './interfaces';
 import { ScrapingError, SourceUnavailableError } from '../core/errors';
+import { ChartDatabase } from '../core/database';
 
 export class ScrapingService implements IScrapingService {
   private readonly strategies = new Map<string, IScrapingStrategy>();
   private readonly sourceConfigs = new Map<string, Source>();
+  private readonly database: ChartDatabase;
+
+  constructor(dbPath?: string) {
+    this.database = new ChartDatabase(dbPath);
+  }
 
   registerStrategy(strategy: IScrapingStrategy): void {
     this.strategies.set(strategy.name, strategy);
@@ -35,15 +41,38 @@ export class ScrapingService implements IScrapingService {
 
     try {
       const charts = await strategy.scrapeCharts(source, options);
+      
+      // Save charts to database and handle duplicates
+      let chartsAdded = 0;
+      let chartsDuplicated = 0;
+      const errors: string[] = [];
+
+      for (const chart of charts) {
+        try {
+          const exists = await this.database.chartExists(chart.id);
+          if (exists) {
+            chartsDuplicated++;
+            if (!options.skipExisting) {
+              await this.database.saveChart(chart); // Update existing chart
+            }
+          } else {
+            await this.database.saveChart(chart);
+            chartsAdded++;
+          }
+        } catch (error) {
+          errors.push(`Failed to save chart ${chart.id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
       const duration = Date.now() - startTime;
       const nextScrapeTime = this.calculateNextScrapeTime(source);
 
       const result: ScrapingResult = {
         sourceName: source.name,
         chartsFound: charts.length,
-        chartsAdded: charts.length, // TODO: Implement deduplication
-        chartsDuplicated: 0,
-        errors: [],
+        chartsAdded,
+        chartsDuplicated,
+        errors,
         duration
       };
 
@@ -129,6 +158,20 @@ export class ScrapingService implements IScrapingService {
     }
 
     return this.strategies.get(source.strategy);
+  }
+
+  /**
+   * Get the database instance
+   */
+  getDatabase(): ChartDatabase {
+    return this.database;
+  }
+
+  /**
+   * Close database connection
+   */
+  close(): void {
+    this.database.close();
   }
 
   private calculateNextScrapeTime(source: Source): Date | undefined {

@@ -177,23 +177,54 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
     const $ = cheerio.load(html);
     
     console.log('Looking for pagination...');
+    console.log('HTML length:', html.length);
+    
+    // Debug: Log all links to see what's available
+    console.log('All links found:');
+    $('a').each((i, el) => {
+      const href = $(el).attr('href');
+      const text = $(el).text().trim();
+      if (href && (href.includes('max-results') || href.includes('updated-max') || text.toLowerCase().includes('older') || text.toLowerCase().includes('next'))) {
+        console.log(`  - Link ${i}: "${text}" -> ${href}`);
+      }
+    });
     
     // Look for "Older Posts" link (common Blogger pagination)
     let olderPostLink = $('a.blog-pager-older-link').first();
+    console.log(`Found blog-pager-older-link: ${olderPostLink.length}`);
     
     // If that doesn't work, try alternative selectors
     if (olderPostLink.length === 0) {
       olderPostLink = $('a:contains("Older Posts")').first();
+      console.log(`Found "Older Posts" text: ${olderPostLink.length}`);
+    }
+    
+    // Look for Blogger's updated-max pagination
+    if (olderPostLink.length === 0) {
+      olderPostLink = $('a[href*="updated-max"]').first();
+      console.log(`Found updated-max links: ${olderPostLink.length}`);
     }
     
     // Try looking for links with "max-results" parameter (Blogger pagination)
     if (olderPostLink.length === 0) {
       olderPostLink = $('a[href*="max-results"]').first();
+      console.log(`Found max-results links: ${olderPostLink.length}`);
     }
     
     // Generic pagination selectors
     if (olderPostLink.length === 0) {
       olderPostLink = $('a:contains("Next")').first();
+      console.log(`Found "Next" text: ${olderPostLink.length}`);
+    }
+    
+    // Try archive links (since this site uses archives instead of traditional pagination)
+    if (olderPostLink.length === 0) {
+      // Look for year archive links
+      const archiveLinks = $('a[href*="/2024/"]').first();
+      if (archiveLinks.length > 0) {
+        console.log(`Found archive link to 2024: ${archiveLinks.attr('href')}`);
+        olderPostLink = archiveLinks;
+      }
     }
     
     if (olderPostLink.length > 0) {

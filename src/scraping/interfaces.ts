@@ -64,5 +64,6 @@ export interface ScrapingOptions {
   respectRobotsTxt?: boolean;
   requestDelay?: number;
   userAgent?: string;
+  skipExisting?: boolean;
   onProgress?: (progress: ScrapingProgress) => void;
 }

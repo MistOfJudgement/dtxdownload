@@ -2,3 +2,4 @@
 export * from './models';
 export * from './interfaces';
 export * from './errors';
+export * from './database';

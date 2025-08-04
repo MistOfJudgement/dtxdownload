@@ -15,7 +15,7 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
     return url.includes('approvedtx.blogspot.com');
   }
 
-  protected getChartElements($: cheerio.CheerioAPI): cheerio.Element[] {
+  protected getChartElements($: cheerio.Root): cheerio.Element[] {
     const elements: cheerio.Element[] = [];
     $('div.post-body.entry-content').each((_, element) => {
       elements.push(element);

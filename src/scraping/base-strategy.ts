@@ -98,7 +98,7 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
     return charts;
   }
 
-  protected abstract getChartElements($: cheerio.CheerioAPI): cheerio.Element[];
+  protected abstract getChartElements($: cheerio.Root): cheerio.Element[];
 
   protected validateChart(chart: IChart): boolean {
     try {

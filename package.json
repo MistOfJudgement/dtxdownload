@@ -2,7 +2,10 @@
   "name": "dtxdownload",
   "version": "1.0.0",
   "description": "Download tool for DTXMania charts",
-  "main": "dist/approveddtx.js",
+  "main": "dist/index.js",
+  "bin": {
+    "dtx-download": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -34,6 +37,7 @@
   },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",
+    "commander": "^11.1.0",
     "extract-zip": "^2.0.1",
     "request": "^2.88.2"
   }

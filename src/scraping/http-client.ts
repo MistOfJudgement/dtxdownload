@@ -5,6 +5,8 @@
 import { IncomingMessage } from 'http';
 import * as http from 'http';
 import * as https from 'https';
+import * as zlib from 'zlib';
+import { Readable } from 'stream';
 import { RateLimitError, ScrapingError } from '../core/errors';
 
 export interface HttpClientOptions {
@@ -99,13 +101,23 @@ export class HttpClient {
       };
 
       const request = client.get(url, { headers, timeout: this.options.timeout }, (res: IncomingMessage) => {
+        let stream: Readable = res;
+        
+        // Handle compression
+        const encoding = res.headers['content-encoding'];
+        if (encoding === 'gzip') {
+          stream = res.pipe(zlib.createGunzip());
+        } else if (encoding === 'deflate') {
+          stream = res.pipe(zlib.createInflate());
+        }
+        
         let data = '';
         
-        res.on('data', (chunk: Buffer) => {
-          data += chunk.toString();
+        stream.on('data', (chunk: Buffer) => {
+          data += chunk.toString('utf8');
         });
         
-        res.on('end', () => {
+        stream.on('end', () => {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve({
               statusCode: res.statusCode,
@@ -118,6 +130,10 @@ export class HttpClient {
           } else {
             reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
           }
+        });
+        
+        stream.on('error', (error: Error) => {
+          reject(error);
         });
       });
 

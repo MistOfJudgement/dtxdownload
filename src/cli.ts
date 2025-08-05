@@ -554,6 +554,9 @@ program
   .option('-c, --concurrent <count>', 'Max concurrent downloads', (value) => parseInt(value), 3)
   .option('--timeout <ms>', 'Download timeout in milliseconds', (value) => parseInt(value), 30000)
   .option('--no-organize', 'Don\'t organize downloads by source')
+  .option('--no-unzip', 'Don\'t automatically unzip downloaded files')
+  .option('--keep-zip', 'Keep ZIP files after extraction')
+  .option('--no-song-folders', 'Don\'t organize extracted files into song folders')
   .action(async (options: any) => {
     try {
       // Require at least one filter to prevent downloading everything
@@ -593,7 +596,10 @@ program
         organizeBySource: options.organize !== false,
         overwrite: options.overwrite || false,
         maxConcurrency: options.concurrent,
-        timeout: options.timeout
+        timeout: options.timeout,
+        autoUnzip: options.unzip !== false,
+        deleteZipAfterExtraction: options.keepZip !== true,
+        organizeSongFolders: options.songFolders !== false
       };
       
       console.log('🎵 DTX Chart Downloader (Query Mode)');
@@ -639,6 +645,9 @@ program
   .option('-c, --concurrent <count>', 'Max concurrent downloads', (value) => parseInt(value), 3)
   .option('--timeout <ms>', 'Download timeout in milliseconds', (value) => parseInt(value), 30000)
   .option('--no-organize', 'Don\'t organize downloads by source')
+  .option('--no-unzip', 'Don\'t automatically unzip downloaded files')
+  .option('--keep-zip', 'Keep ZIP files after extraction')
+  .option('--no-song-folders', 'Don\'t organize extracted files into song folders')
   .option('--confirm', 'Confirm download without prompting')
   .action(async (ids: string[], options: any) => {
     try {
@@ -697,7 +706,10 @@ program
         organizeBySource: options.organize !== false,
         overwrite: options.overwrite || false,
         maxConcurrency: options.concurrent,
-        timeout: options.timeout
+        timeout: options.timeout,
+        autoUnzip: options.unzip !== false,
+        deleteZipAfterExtraction: options.keepZip !== true,
+        organizeSongFolders: options.songFolders !== false
       };
       
       console.log('🎵 DTX Chart Downloader (ID Mode)');

@@ -14,3 +14,12 @@ Thumbs.db
 *.db
 downloads/
 temp/
+
+# E2E Test artifacts
+tests/e2e/test-downloads/
+tests/e2e/test-files/
+tests/e2e/test-full-downloads/
+tests/e2e/test-full-workflow.db
+tests/e2e/test-scraping.db
+tests/e2e/**/*.zip
+tests/e2e/**/*.db

@@ -27,6 +27,15 @@ export interface DownloadOptions {
   
   /** Timeout in milliseconds */
   timeout?: number;
+
+  /** Whether to automatically unzip downloaded files */
+  autoUnzip?: boolean;
+
+  /** Whether to delete ZIP files after successful extraction */
+  deleteZipAfterExtraction?: boolean;
+
+  /** Whether to organize extracted files into song folders */
+  organizeSongFolders?: boolean;
 }
 
 export interface DownloadResult {
@@ -59,22 +68,15 @@ export class ChartDownloader {
       // Determine file path
       const filePath = this.getFilePath(chart, options);
       
-      // Check if this is a Google Drive folder URL (batch download)
+      // Check if this is a Google Drive folder URL (not supported for automation)
       if (this.isGoogleDriveFolderUrl(chart.downloadUrl)) {
-        // Try to automatically download from the folder
-        try {
-          const downloadResult = await this.downloadFromGoogleDriveFolder(chart, options);
-          return downloadResult;
-        } catch (error) {
-          // Fall back to folder URL message if automation fails
-          return {
-            chart,
-            success: false,
-            error: `Automated download failed: ${error instanceof Error ? error.message : String(error)}. Manual download required from: ${chart.downloadUrl}`,
-            fileSize: 0,
-            downloadTime: Date.now() - startTime
-          };
-        }
+        return {
+          chart,
+          success: false,
+          error: `Google Drive folder URLs are not supported for automatic download. Individual file URLs are required.`,
+          fileSize: 0,
+          downloadTime: Date.now() - startTime
+        };
       }
 
       // Check if this is an individual Google Drive file URL
@@ -182,86 +184,6 @@ export class ChartDownloader {
   /**
    * Check if URL is a Google Drive folder
    */
-  /**
-   * Handle Google Drive folder downloads with automated browser opening and guidance
-   */
-  private async downloadFromGoogleDriveFolder(chart: IChart, options: DownloadOptions): Promise<DownloadResult> {
-    try {
-      // Extract chart number from chart ID for better guidance
-      const chartNumberMatch = chart.id.match(/(\d+)$/);
-      const chartNumber = chartNumberMatch ? chartNumberMatch[1] : 'unknown';
-      
-      // Create the expected file path
-      const filePath = this.getFilePath(chart, options);
-      const dir = path.dirname(filePath);
-      
-      // Ensure directory exists
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      
-      console.log(`🎯 Chart #${chartNumber}: "${chart.title}" by ${chart.artist}`);
-      console.log(`📁 Opening Google Drive folder: ${chart.downloadUrl}`);
-      console.log(`💡 Look for: "#${chartNumber} ${chart.title}.zip" or "#${chartNumber}.zip"`);
-      console.log(`📂 Save to: ${filePath}`);
-      
-      // Try to open the URL in the user's default browser
-      await this.openInBrowser(chart.downloadUrl);
-      
-      // Return a result indicating manual download is needed
-      return {
-        chart,
-        success: false,
-        error: `Manual download required:
-1. ✅ Opened: ${chart.downloadUrl}
-2. 🔍 Find: "#${chartNumber} ${chart.title}.zip" (or similar)
-3. ⬇️  Download and save to: ${filePath}
-4. 🎮 Chart will be ready for DTXMania!`,
-        downloadTime: 0
-      };
-      
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Open URL in the user's default browser
-   */
-  private async openInBrowser(url: string): Promise<void> {
-    try {
-      const { spawn } = require('child_process');
-      const os = require('os');
-      
-      let command: string;
-      const args: string[] = [url];
-      
-      switch (os.platform()) {
-        case 'darwin': // macOS
-          command = 'open';
-          break;
-        case 'win32': // Windows
-          command = 'start';
-          args.unshift('');
-          break;
-        default: // Linux and others
-          command = 'xdg-open';
-          break;
-      }
-      
-      const child = spawn(command, args, {
-        detached: true,
-        stdio: 'ignore'
-      });
-      
-      child.unref();
-      console.log(`🌐 Opened ${url} in default browser`);
-      
-    } catch (error) {
-      console.log(`⚠️  Could not open browser automatically. Please open: ${url}`);
-    }
-  }
-
   private isGoogleDriveFolderUrl(url: string): boolean {
     return url.includes('drive.google.com/drive/folders/');
   }
@@ -306,9 +228,17 @@ export class ChartDownloader {
       const downloadResult = await this.attemptGoogleDriveDownload(directDownloadUrl, filePath, chart, startTime);
       
       if (downloadResult.success) {
-        // Try to unzip if it's a ZIP file
-        if (filePath.endsWith('.zip')) {
-          await this.attemptUnzip(filePath, dir);
+        // Try to unzip if it's a ZIP file and auto-unzip is enabled
+        console.log(`🔍 Checking unzip conditions:`);
+        console.log(`   File path: ${filePath}`);
+        console.log(`   Ends with .zip: ${filePath.endsWith('.zip')}`);
+        console.log(`   Auto-unzip enabled: ${options.autoUnzip !== false}`);
+        
+        if (filePath.endsWith('.zip') && (options.autoUnzip !== false)) {
+          console.log(`📦 Starting unzip process...`);
+          await this.attemptUnzip(filePath, chart, options);
+        } else {
+          console.log(`⏭️  Skipping unzip`);
         }
         
         return downloadResult;
@@ -316,7 +246,24 @@ export class ChartDownloader {
       
       // If direct download failed, try the confirm download flow
       console.log(`⚠️  Direct download failed, trying confirmation flow...`);
-      return await this.handleGoogleDriveConfirmFlow(fileId, filePath, chart, startTime);
+      const confirmDownloadResult = await this.handleGoogleDriveConfirmFlow(fileId, filePath, chart, startTime);
+      
+      if (confirmDownloadResult.success) {
+        // Try to unzip if it's a ZIP file and auto-unzip is enabled
+        console.log(`🔍 Checking unzip conditions (confirmation flow):`);
+        console.log(`   File path: ${filePath}`);
+        console.log(`   Ends with .zip: ${filePath.endsWith('.zip')}`);
+        console.log(`   Auto-unzip enabled: ${options.autoUnzip !== false}`);
+        
+        if (filePath.endsWith('.zip') && (options.autoUnzip !== false)) {
+          console.log(`📦 Starting unzip process...`);
+          await this.attemptUnzip(filePath, chart, options);
+        } else {
+          console.log(`⏭️  Skipping unzip`);
+        }
+      }
+      
+      return confirmDownloadResult;
       
     } catch (error) {
       return {
@@ -358,11 +305,18 @@ export class ChartDownloader {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
       }, (response) => {
+        // Helper function to cleanup and resolve
+        const cleanupAndResolve = (result: DownloadResult) => {
+          response.destroy(); // Ensure response is destroyed
+          request.destroy(); // Ensure request is destroyed
+          resolve(result);
+        };
+
         // Check if we're being redirected to a confirmation page
         if (response.statusCode === 302 || response.statusCode === 301) {
           const location = response.headers.location;
           if (location?.includes('confirm')) {
-            resolve({
+            cleanupAndResolve({
               chart,
               success: false,
               error: 'Confirmation required',
@@ -374,7 +328,7 @@ export class ChartDownloader {
         }
         
         if (response.statusCode !== 200) {
-          resolve({
+          cleanupAndResolve({
             chart,
             success: false,
             error: `HTTP ${response.statusCode}`,
@@ -388,7 +342,7 @@ export class ChartDownloader {
         const contentType = response.headers['content-type'];
         if (contentType?.includes('text/html')) {
           // This means we got an HTML page (likely confirmation) instead of the file
-          resolve({
+          cleanupAndResolve({
             chart,
             success: false,
             error: 'Received HTML instead of file',
@@ -410,7 +364,7 @@ export class ChartDownloader {
         fileStream.on('finish', () => {
           fileStream.close();
           console.log(`✅ Downloaded: ${path.basename(filePath)} (${downloadedBytes} bytes)`);
-          resolve({
+          cleanupAndResolve({
             chart,
             success: true,
             filePath,
@@ -421,7 +375,7 @@ export class ChartDownloader {
         
         fileStream.on('error', (error) => {
           fs.unlink(filePath, () => {}); // Clean up partial file
-          resolve({
+          cleanupAndResolve({
             chart,
             success: false,
             error: `File write error: ${error.message}`,
@@ -432,6 +386,7 @@ export class ChartDownloader {
       });
       
       request.on('error', (error) => {
+        request.destroy(); // Ensure request is destroyed
         resolve({
           chart,
           success: false,
@@ -513,11 +468,31 @@ export class ChartDownloader {
   }
 
   /**
-   * Attempt to unzip a downloaded file
+   * Attempt to unzip a downloaded file into an organized song folder
    */
-  private async attemptUnzip(zipPath: string, extractDir: string): Promise<void> {
+  private async attemptUnzip(zipPath: string, chart: IChart, options: DownloadOptions): Promise<void> {
     try {
       console.log(`📦 Attempting to unzip: ${path.basename(zipPath)}`);
+      
+      // Determine extraction directory based on options
+      let extractDir: string;
+      
+      if (options.organizeSongFolders !== false) {
+        // Create a song folder based on chart information
+        const zipDir = path.dirname(zipPath);
+        const songFolderName = this.sanitizeFilename(`${chart.title} - ${chart.artist}`);
+        extractDir = path.join(zipDir, 'songs', songFolderName);
+      } else {
+        // Extract to the same directory as the ZIP file
+        extractDir = path.dirname(zipPath);
+      }
+      
+      // Ensure the extraction directory exists
+      if (!fs.existsSync(extractDir)) {
+        fs.mkdirSync(extractDir, { recursive: true });
+      }
+      
+      console.log(`📂 Extracting to: ${extractDir}`);
       
       const { spawn } = require('child_process');
       const os = require('os');
@@ -527,7 +502,7 @@ export class ChartDownloader {
         let args: string[];
         
         if (os.platform() === 'win32') {
-          // Windows: try PowerShell first, then fall back to manual
+          // Windows: try PowerShell first
           command = 'powershell';
           args = ['-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${extractDir}" -Force`];
         } else {
@@ -538,25 +513,118 @@ export class ChartDownloader {
         
         const child = spawn(command, args, { stdio: 'pipe' });
         
+        console.log(`🛠️  Executing: ${command} ${args.join(' ')}`);
+        
+        let stdout = '';
+        let stderr = '';
+        
+        child.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString();
+        });
+        
+        child.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString();
+        });
+        
         child.on('close', (code: number) => {
+          console.log(`📋 Unzip command output (code ${code}):`);
+          if (stdout) console.log(`   stdout: ${stdout.trim()}`);
+          if (stderr) console.log(`   stderr: ${stderr.trim()}`);
+          
           if (code === 0) {
-            console.log(`✅ Unzipped: ${path.basename(zipPath)}`);
+            if (options.organizeSongFolders !== false) {
+              console.log(`✅ Unzipped to song folder: ${path.basename(extractDir)}`);
+            } else {
+              console.log(`✅ Unzipped: ${path.basename(zipPath)}`);
+            }
+            
+            // Try to clean up the ZIP file after successful extraction
+            if (options.deleteZipAfterExtraction !== false) {
+              this.cleanupZipFile(zipPath);
+            }
+            
+            // Organize the extracted files if song folders are enabled
+            if (options.organizeSongFolders !== false) {
+              this.organizeExtractedFiles(extractDir, chart);
+            }
+            
             resolve();
           } else {
-            console.log(`⚠️  Unzip failed (code ${code}). File saved as ZIP: ${zipPath}`);
+            console.log(`⚠️  Unzip failed (code ${code}). ZIP file preserved: ${zipPath}`);
             resolve(); // Don't fail the download if unzip fails
           }
         });
         
         child.on('error', (error: Error) => {
-          console.log(`⚠️  Unzip error: ${error.message}. File saved as ZIP: ${zipPath}`);
+          console.log(`⚠️  Unzip error: ${error.message}. ZIP file preserved: ${zipPath}`);
           resolve(); // Don't fail the download if unzip fails
         });
       });
       
     } catch (error) {
-      console.log(`⚠️  Unzip failed: ${error instanceof Error ? error.message : String(error)}. File saved as ZIP: ${zipPath}`);
+      console.log(`⚠️  Unzip failed: ${error instanceof Error ? error.message : String(error)}. ZIP file preserved: ${zipPath}`);
       // Don't throw - unzip failure shouldn't fail the download
+    }
+  }
+
+  /**
+   * Clean up ZIP file after successful extraction
+   */
+  private cleanupZipFile(zipPath: string): void {
+    try {
+      fs.unlinkSync(zipPath);
+      console.log(`🗑️  Cleaned up ZIP file: ${path.basename(zipPath)}`);
+    } catch (error) {
+      console.log(`⚠️  Could not delete ZIP file: ${zipPath}`);
+    }
+  }
+
+  /**
+   * Organize extracted files in the song folder
+   */
+  private organizeExtractedFiles(songFolder: string, chart: IChart): void {
+    try {
+      console.log(`🎵 Organizing files in song folder...`);
+      
+      // Look for DTX files and other important files
+      const files = fs.readdirSync(songFolder, { withFileTypes: true });
+      let dtxFiles = 0;
+      let audioFiles = 0;
+      let imageFiles = 0;
+      
+      for (const file of files) {
+        if (file.isFile()) {
+          const extension = path.extname(file.name).toLowerCase();
+          
+          if (extension === '.dtx') {
+            dtxFiles++;
+          } else if (['.wav', '.mp3', '.ogg', '.flac'].includes(extension)) {
+            audioFiles++;
+          } else if (['.jpg', '.jpeg', '.png', '.bmp', '.gif'].includes(extension)) {
+            imageFiles++;
+          }
+        }
+      }
+      
+      console.log(`📊 Found in song folder: ${dtxFiles} DTX files, ${audioFiles} audio files, ${imageFiles} images`);
+      
+      // Create a simple info file with chart metadata
+      const infoFilePath = path.join(songFolder, 'chart-info.txt');
+      const chartInfo = [
+        `Chart: ${chart.title}`,
+        `Artist: ${chart.artist}`,
+        `BPM: ${chart.bpm}`,
+        `Difficulties: ${chart.difficulties.join(', ')}`,
+        `Source: ${chart.source}`,
+        `Downloaded: ${new Date().toISOString()}`,
+        `Files: ${dtxFiles} DTX, ${audioFiles} audio, ${imageFiles} images`
+      ].join('\n');
+      
+      fs.writeFileSync(infoFilePath, chartInfo, 'utf8');
+      console.log(`📝 Created chart info file: chart-info.txt`);
+      
+    } catch (error) {
+      console.log(`⚠️  Could not organize files: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -698,11 +766,17 @@ export class ChartDownloader {
         
         writeStream.on('finish', () => {
           writeStream.close();
+          // Properly destroy the request and response to free resources
+          request.destroy();
+          response.destroy();
           resolve(downloadedBytes);
         });
         
         writeStream.on('error', (error) => {
           writeStream.destroy();
+          // Properly destroy the request and response on error
+          request.destroy();
+          response.destroy();
           fs.unlink(filePath, () => {}); // Clean up partial file
           reject(error);
         });
@@ -715,6 +789,7 @@ export class ChartDownloader {
       });
       
       request.on('error', (error) => {
+        request.destroy();
         reject(error);
       });
     });
@@ -737,12 +812,26 @@ export class ChartDownloader {
         });
         
         response.on('end', () => {
+          response.destroy(); // Ensure response is destroyed
+          request.destroy(); // Ensure request is destroyed
           resolve(data);
+        });
+        
+        response.on('error', (error) => {
+          response.destroy(); // Ensure response is destroyed
+          request.destroy(); // Ensure request is destroyed
+          reject(error);
         });
       });
       
       request.on('error', (error) => {
+        request.destroy(); // Ensure request is destroyed
         reject(error);
+      });
+      
+      request.setTimeout(15000, () => {
+        request.destroy(); // Timeout cleanup
+        reject(new Error('Request timeout'));
       });
     });
   }

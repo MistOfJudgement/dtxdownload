@@ -130,21 +130,57 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
       
       // Determine which batch folder this chart belongs to based on chart number
       const chartNumber = parseInt(chartId);
-      const batchFolder = this.getBatchFolderUrl(chartNumber);
       
-      // Look for download links in the post content
-      let downloadUrl = batchFolder; // Default to batch folder
+      // Extract download URL - look for Google Drive links directly in the HTML and text
+      let downloadUrl = '';
+      const $post = $(element);
       
-      // Try to find specific download link in the text content
-      const dlLinkMatch = textContent.match(/\[DL\]\s*\(([^)]+)\)/);
-      if (dlLinkMatch) {
-        downloadUrl = dlLinkMatch[1];
-      } else {
-        // Look for direct Google Drive links in the text
-        const gdriveLinkMatch = textContent.match(/https:\/\/drive\.google\.com[^\s\)]+/);
-        if (gdriveLinkMatch) {
-          downloadUrl = gdriveLinkMatch[0];
+      // Priority 1: Look for Google Drive file links in href attributes
+      $post.find('a').each((_, linkElement) => {
+        const href = $(linkElement).attr('href');
+        if (href && href.includes('drive.google.com/file/d/')) {
+          downloadUrl = href;
+          return false; // Break the loop
         }
+        return; // Explicit return for all code paths
+      });
+      
+      // Priority 2: Look for Google Drive file links in the text content
+      if (!downloadUrl) {
+        const gdriveFileLinkMatch = textContent.match(/https:\/\/drive\.google\.com\/file\/d\/[a-zA-Z0-9_-]+(?:\/view)?(?:\?usp=sharing)?/);
+        if (gdriveFileLinkMatch) {
+          downloadUrl = gdriveFileLinkMatch[0];
+        }
+      }
+      
+      // Priority 3: Look for other Google Drive patterns
+      if (!downloadUrl) {
+        // Check for uc?id= download links
+        const gdriveUcLinkMatch = textContent.match(/https:\/\/drive\.google\.com\/uc\?[^\s\)]*id=([a-zA-Z0-9_-]+)/);
+        if (gdriveUcLinkMatch) {
+          downloadUrl = gdriveUcLinkMatch[0];
+        } else {
+          // Check for open?id= links
+          const gdriveOpenLinkMatch = textContent.match(/https:\/\/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
+          if (gdriveOpenLinkMatch) {
+            downloadUrl = gdriveOpenLinkMatch[0];
+          }
+        }
+      }
+      
+      // Priority 4: Look for download links in common markdown/text patterns
+      if (!downloadUrl) {
+        const dlLinkMatch = textContent.match(/\[DL\]\s*\(([^)]+)\)/);
+        if (dlLinkMatch) {
+          downloadUrl = dlLinkMatch[1];
+        }
+      }
+      
+      // Fallback: If no individual file URL found, use batch folder but mark it for enhancement
+      if (!downloadUrl || downloadUrl === '') {
+        const batchFolder = this.getBatchFolderUrl(chartNumber);
+        downloadUrl = batchFolder;
+        console.log(`⚠️  Using batch folder for chart #${chartId}, will need individual file URL extraction`);
       }
       
       // Extract preview image

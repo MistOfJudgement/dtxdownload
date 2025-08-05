@@ -434,13 +434,14 @@ program
 program
   .command('search')
   .description('Search for charts in the database')
+  .argument('[query]', 'Search query (searches title and artist)')
   .option('-t, --title <title>', 'Search by title')
   .option('-a, --artist <artist>', 'Search by artist')
   .option('-s, --source <source>', 'Filter by source')
   .option('--min-bpm <bpm>', 'Minimum BPM')
   .option('--max-bpm <bpm>', 'Maximum BPM')
   .option('-l, --limit <number>', 'Limit results', '20')
-  .action(async (options: any) => {
+  .action(async (query: string | undefined, options: any) => {
     try {
       const service = await initializeScrapingService();
       const db = service.getDatabase();
@@ -449,6 +450,37 @@ program
         limit: parseInt(options.limit)
       };
       
+      // If a query is provided, search both title and artist
+      if (query) {
+        // We'll search for charts where either title OR artist contains the query
+        const allCharts = await db.queryCharts({});
+        const filteredCharts = allCharts.filter(chart => 
+          chart.title.toLowerCase().includes(query.toLowerCase()) ||
+          chart.artist.toLowerCase().includes(query.toLowerCase())
+        );
+        
+        console.log(`🔍 Found ${filteredCharts.length} charts matching "${query}":\n`);
+        
+        const limitedCharts = filteredCharts.slice(0, parseInt(options.limit));
+        
+        limitedCharts.forEach((chart, index) => {
+          console.log(`${index + 1}. ${chart.title}`);
+          console.log(`   Artist: ${chart.artist}`);
+          console.log(`   BPM: ${chart.bpm}`);
+          console.log(`   Source: ${chart.source}`);
+          console.log(`   Difficulties: ${chart.difficulties.join('/')}`);
+          if (chart.previewImageUrl) {
+            console.log(`   Preview: ${chart.previewImageUrl}`);
+          }
+          console.log(`   Download: ${chart.downloadUrl}`);
+          console.log('');
+        });
+        
+        service.close();
+        return;
+      }
+      
+      // Handle specific options
       if (options.title) searchOptions.title = options.title;
       if (options.artist) searchOptions.artist = options.artist;
       if (options.source) searchOptions.source = options.source;

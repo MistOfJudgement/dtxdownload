@@ -61,13 +61,36 @@ export class ChartDownloader {
       
       // Check if this is a Google Drive folder URL (batch download)
       if (this.isGoogleDriveFolderUrl(chart.downloadUrl)) {
-        return {
-          chart,
-          success: true,
-          error: `Folder URL: ${chart.downloadUrl}`,
-          fileSize: 0,
-          downloadTime: Date.now() - startTime
-        };
+        // Try to automatically download from the folder
+        try {
+          const downloadResult = await this.downloadFromGoogleDriveFolder(chart, options);
+          return downloadResult;
+        } catch (error) {
+          // Fall back to folder URL message if automation fails
+          return {
+            chart,
+            success: false,
+            error: `Automated download failed: ${error instanceof Error ? error.message : String(error)}. Manual download required from: ${chart.downloadUrl}`,
+            fileSize: 0,
+            downloadTime: Date.now() - startTime
+          };
+        }
+      }
+
+      // Check if this is an individual Google Drive file URL
+      if (this.isGoogleDriveFileUrl(chart.downloadUrl)) {
+        try {
+          const downloadResult = await this.downloadFromGoogleDriveFile(chart, options);
+          return downloadResult;
+        } catch (error) {
+          return {
+            chart,
+            success: false,
+            error: `Google Drive file download failed: ${error instanceof Error ? error.message : String(error)}`,
+            fileSize: 0,
+            downloadTime: Date.now() - startTime
+          };
+        }
       }
       
       // Check if file exists and we shouldn't overwrite
@@ -159,8 +182,382 @@ export class ChartDownloader {
   /**
    * Check if URL is a Google Drive folder
    */
+  /**
+   * Handle Google Drive folder downloads with automated browser opening and guidance
+   */
+  private async downloadFromGoogleDriveFolder(chart: IChart, options: DownloadOptions): Promise<DownloadResult> {
+    try {
+      // Extract chart number from chart ID for better guidance
+      const chartNumberMatch = chart.id.match(/(\d+)$/);
+      const chartNumber = chartNumberMatch ? chartNumberMatch[1] : 'unknown';
+      
+      // Create the expected file path
+      const filePath = this.getFilePath(chart, options);
+      const dir = path.dirname(filePath);
+      
+      // Ensure directory exists
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      console.log(`🎯 Chart #${chartNumber}: "${chart.title}" by ${chart.artist}`);
+      console.log(`📁 Opening Google Drive folder: ${chart.downloadUrl}`);
+      console.log(`💡 Look for: "#${chartNumber} ${chart.title}.zip" or "#${chartNumber}.zip"`);
+      console.log(`📂 Save to: ${filePath}`);
+      
+      // Try to open the URL in the user's default browser
+      await this.openInBrowser(chart.downloadUrl);
+      
+      // Return a result indicating manual download is needed
+      return {
+        chart,
+        success: false,
+        error: `Manual download required:
+1. ✅ Opened: ${chart.downloadUrl}
+2. 🔍 Find: "#${chartNumber} ${chart.title}.zip" (or similar)
+3. ⬇️  Download and save to: ${filePath}
+4. 🎮 Chart will be ready for DTXMania!`,
+        downloadTime: 0
+      };
+      
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Open URL in the user's default browser
+   */
+  private async openInBrowser(url: string): Promise<void> {
+    try {
+      const { spawn } = require('child_process');
+      const os = require('os');
+      
+      let command: string;
+      const args: string[] = [url];
+      
+      switch (os.platform()) {
+        case 'darwin': // macOS
+          command = 'open';
+          break;
+        case 'win32': // Windows
+          command = 'start';
+          args.unshift('');
+          break;
+        default: // Linux and others
+          command = 'xdg-open';
+          break;
+      }
+      
+      const child = spawn(command, args, {
+        detached: true,
+        stdio: 'ignore'
+      });
+      
+      child.unref();
+      console.log(`🌐 Opened ${url} in default browser`);
+      
+    } catch (error) {
+      console.log(`⚠️  Could not open browser automatically. Please open: ${url}`);
+    }
+  }
+
   private isGoogleDriveFolderUrl(url: string): boolean {
     return url.includes('drive.google.com/drive/folders/');
+  }
+
+  private isGoogleDriveFileUrl(url: string): boolean {
+    return url.includes('drive.google.com/file/d/') || 
+           url.includes('drive.google.com/open?id=') ||
+           url.includes('drive.google.com/uc?id=') ||
+           url.includes('drive.usercontent.google.com/uc?');
+  }
+
+  /**
+   * Download individual Google Drive file with full automation
+   */
+  private async downloadFromGoogleDriveFile(chart: IChart, options: DownloadOptions): Promise<DownloadResult> {
+    const startTime = Date.now();
+    
+    try {
+      console.log(`🎯 Downloading: "${chart.title}" by ${chart.artist}`);
+      console.log(`🔗 Google Drive URL: ${chart.downloadUrl}`);
+      
+      // Create file path
+      const filePath = this.getFilePath(chart, options);
+      const dir = path.dirname(filePath);
+      
+      // Ensure directory exists
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      // Extract file ID from various Google Drive URL formats
+      const fileId = this.extractGoogleDriveFileId(chart.downloadUrl);
+      if (!fileId) {
+        throw new Error('Could not extract Google Drive file ID from URL');
+      }
+      
+      console.log(`📁 File ID: ${fileId}`);
+      
+      // Use the direct download URL pattern: drive.usercontent.google.com (this will likely need confirmation)
+      const directDownloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+      console.log(`🔗 Trying initial download: ${directDownloadUrl}`);
+      const downloadResult = await this.attemptGoogleDriveDownload(directDownloadUrl, filePath, chart, startTime);
+      
+      if (downloadResult.success) {
+        // Try to unzip if it's a ZIP file
+        if (filePath.endsWith('.zip')) {
+          await this.attemptUnzip(filePath, dir);
+        }
+        
+        return downloadResult;
+      }
+      
+      // If direct download failed, try the confirm download flow
+      console.log(`⚠️  Direct download failed, trying confirmation flow...`);
+      return await this.handleGoogleDriveConfirmFlow(fileId, filePath, chart, startTime);
+      
+    } catch (error) {
+      return {
+        chart,
+        success: false,
+        error: `Google Drive download failed: ${error instanceof Error ? error.message : String(error)}`,
+        fileSize: 0,
+        downloadTime: Date.now() - startTime
+      };
+    }
+  }
+
+  /**
+   * Extract Google Drive file ID from various URL formats
+   */
+  private extractGoogleDriveFileId(url: string): string | null {
+    // Format: https://drive.google.com/file/d/FILE_ID/view
+    let match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (match) return match[1];
+    
+    // Format: https://drive.google.com/open?id=FILE_ID
+    match = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (match) return match[1];
+    
+    // Format: https://drive.google.com/uc?id=FILE_ID
+    match = url.match(/uc\?.*id=([a-zA-Z0-9_-]+)/);
+    if (match) return match[1];
+    
+    return null;
+  }
+
+  /**
+   * Attempt direct Google Drive download
+   */
+  private async attemptGoogleDriveDownload(url: string, filePath: string, chart: IChart, startTime: number): Promise<DownloadResult> {
+    return new Promise((resolve) => {
+      const request = https.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      }, (response) => {
+        // Check if we're being redirected to a confirmation page
+        if (response.statusCode === 302 || response.statusCode === 301) {
+          const location = response.headers.location;
+          if (location?.includes('confirm')) {
+            resolve({
+              chart,
+              success: false,
+              error: 'Confirmation required',
+              fileSize: 0,
+              downloadTime: Date.now() - startTime
+            });
+            return;
+          }
+        }
+        
+        if (response.statusCode !== 200) {
+          resolve({
+            chart,
+            success: false,
+            error: `HTTP ${response.statusCode}`,
+            fileSize: 0,
+            downloadTime: Date.now() - startTime
+          });
+          return;
+        }
+        
+        // Check content type
+        const contentType = response.headers['content-type'];
+        if (contentType?.includes('text/html')) {
+          // This means we got an HTML page (likely confirmation) instead of the file
+          resolve({
+            chart,
+            success: false,
+            error: 'Received HTML instead of file',
+            fileSize: 0,
+            downloadTime: Date.now() - startTime
+          });
+          return;
+        }
+        
+        const fileStream = fs.createWriteStream(filePath);
+        let downloadedBytes = 0;
+        
+        response.on('data', (chunk) => {
+          downloadedBytes += chunk.length;
+        });
+        
+        response.pipe(fileStream);
+        
+        fileStream.on('finish', () => {
+          fileStream.close();
+          console.log(`✅ Downloaded: ${path.basename(filePath)} (${downloadedBytes} bytes)`);
+          resolve({
+            chart,
+            success: true,
+            filePath,
+            fileSize: downloadedBytes,
+            downloadTime: Date.now() - startTime
+          });
+        });
+        
+        fileStream.on('error', (error) => {
+          fs.unlink(filePath, () => {}); // Clean up partial file
+          resolve({
+            chart,
+            success: false,
+            error: `File write error: ${error.message}`,
+            fileSize: 0,
+            downloadTime: Date.now() - startTime
+          });
+        });
+      });
+      
+      request.on('error', (error) => {
+        resolve({
+          chart,
+          success: false,
+          error: `Request error: ${error.message}`,
+          fileSize: 0,
+          downloadTime: Date.now() - startTime
+        });
+      });
+      
+      request.setTimeout(30000, () => {
+        request.destroy();
+        resolve({
+          chart,
+          success: false,
+          error: 'Download timeout',
+          fileSize: 0,
+          downloadTime: Date.now() - startTime
+        });
+      });
+    });
+  }
+
+  /**
+   * Handle Google Drive confirmation flow for large files
+   */
+  private async handleGoogleDriveConfirmFlow(fileId: string, filePath: string, chart: IChart, startTime: number): Promise<DownloadResult> {
+    try {
+      console.log(`🔄 Handling Google Drive confirmation flow...`);
+      
+      // First, get the confirmation page to extract UUID
+      const confirmUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+      const confirmPageResponse = await this.fetchWithUserAgent(confirmUrl);
+      
+      if (!confirmPageResponse.ok) {
+        throw new Error(`Failed to fetch confirmation page: ${confirmPageResponse.status}`);
+      }
+      
+      const confirmPageHtml = await confirmPageResponse.text();
+      const $ = cheerio.load(confirmPageHtml);
+      
+      // Extract the UUID from the hidden form input
+      const uuidInput = $('input[name="uuid"]');
+      const uuid = uuidInput.attr('value');
+      
+      if (!uuid) {
+        throw new Error('Could not find UUID in confirmation page');
+      }
+      
+      console.log(`🔑 Found UUID: ${uuid}`);
+      
+      // Construct the direct download URL with UUID
+      const downloadUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t&uuid=${uuid}`;
+      console.log(`🔗 Direct download URL: ${downloadUrl}`);
+      
+      // Now attempt the actual download
+      return await this.attemptGoogleDriveDownload(downloadUrl, filePath, chart, startTime);
+      
+    } catch (error) {
+      return {
+        chart,
+        success: false,
+        error: `Confirmation flow failed: ${error instanceof Error ? error.message : String(error)}`,
+        fileSize: 0,
+        downloadTime: Date.now() - startTime
+      };
+    }
+  }
+
+  /**
+   * Fetch with proper User-Agent header
+   */
+  private async fetchWithUserAgent(url: string): Promise<any> {
+    const fetch = require('node-fetch');
+    return fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+  }
+
+  /**
+   * Attempt to unzip a downloaded file
+   */
+  private async attemptUnzip(zipPath: string, extractDir: string): Promise<void> {
+    try {
+      console.log(`📦 Attempting to unzip: ${path.basename(zipPath)}`);
+      
+      const { spawn } = require('child_process');
+      const os = require('os');
+      
+      return new Promise((resolve) => {
+        let command: string;
+        let args: string[];
+        
+        if (os.platform() === 'win32') {
+          // Windows: try PowerShell first, then fall back to manual
+          command = 'powershell';
+          args = ['-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${extractDir}" -Force`];
+        } else {
+          // Unix-like systems: use unzip
+          command = 'unzip';
+          args = ['-o', zipPath, '-d', extractDir];
+        }
+        
+        const child = spawn(command, args, { stdio: 'pipe' });
+        
+        child.on('close', (code: number) => {
+          if (code === 0) {
+            console.log(`✅ Unzipped: ${path.basename(zipPath)}`);
+            resolve();
+          } else {
+            console.log(`⚠️  Unzip failed (code ${code}). File saved as ZIP: ${zipPath}`);
+            resolve(); // Don't fail the download if unzip fails
+          }
+        });
+        
+        child.on('error', (error: Error) => {
+          console.log(`⚠️  Unzip error: ${error.message}. File saved as ZIP: ${zipPath}`);
+          resolve(); // Don't fail the download if unzip fails
+        });
+      });
+      
+    } catch (error) {
+      console.log(`⚠️  Unzip failed: ${error instanceof Error ? error.message : String(error)}. File saved as ZIP: ${zipPath}`);
+      // Don't throw - unzip failure shouldn't fail the download
+    }
   }
 
   /**
@@ -199,28 +596,6 @@ export class ChartDownloader {
       // Fallback to original URL
       return url;
     }
-  }
-
-  /**
-   * Extract Google Drive file ID from URL
-   */
-  private extractGoogleDriveFileId(url: string): string | null {
-    // Handle various Google Drive URL formats
-    const patterns = [
-      /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,  // /file/d/ID/view
-      /drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/, // uc?export=download&id=ID
-      /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/, // open?id=ID
-      /([a-zA-Z0-9_-]{25,})/  // Generic long ID pattern
-    ];
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-    
-    return null;
   }
 
   /**

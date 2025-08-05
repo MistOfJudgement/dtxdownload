@@ -6,7 +6,10 @@
 
 import { Command } from 'commander';
 import { ScrapingService, ApprovedDtxStrategy, Source } from './scraping';
+import { DownloadService } from './core/download/download-service';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Type definitions for command options
 interface ScrapeOptions {
@@ -227,27 +230,203 @@ program
 
 program
   .command('stats')
-  .description('Show database statistics')
-  .action(async () => {
+  .description('Show detailed database status and statistics')
+  .option('--verbose', 'Show detailed breakdown by source')
+  .action(async (options: any) => {
     try {
       const service = await initializeScrapingService();
       const db = service.getDatabase();
       
-      console.log('📊 Database Statistics:\n');
+      console.log('📊 DTX Database Status\n');
       
-      const totalCharts = await db.getTotalChartCount();
-      console.log(`📈 Total charts: ${totalCharts}`);
+      // Get basic stats
+      const allCharts = await db.queryCharts({});
+      const totalCharts = allCharts.length;
       
-      const chartsBySource = await db.getChartCountBySource();
-      console.log('\n📋 Charts by source:');
-      for (const [source, count] of Object.entries(chartsBySource)) {
-        console.log(`   ${source}: ${count} charts`);
+      if (totalCharts === 0) {
+        console.log('❌ Database is empty. Run scraping to populate it.');
+        service.close();
+        return;
       }
+      
+      console.log(`� Total Charts: ${totalCharts}`);
+      
+      // Get charts by source
+      const sourceStats = await db.getChartCountBySource();
+      console.log('\n📋 Charts by Source:');
+      Object.entries(sourceStats)
+        .sort(([,a], [,b]) => b - a)
+        .forEach(([source, count]) => {
+          const percentage = ((count / totalCharts) * 100).toFixed(1);
+          console.log(`   ${source}: ${count} charts (${percentage}%)`);
+        });
+      
+      // BPM analysis
+      const bpmRanges = {
+        'Slow (< 120 BPM)': 0,
+        'Medium (120-160 BPM)': 0,
+        'Fast (160-200 BPM)': 0,
+        'Very Fast (> 200 BPM)': 0,
+        'Unknown': 0
+      };
+      
+      allCharts.forEach(chart => {
+        const bpm = parseInt(chart.bpm);
+        if (isNaN(bpm)) {
+          bpmRanges['Unknown']++;
+        } else if (bpm < 120) {
+          bpmRanges['Slow (< 120 BPM)']++;
+        } else if (bpm <= 160) {
+          bpmRanges['Medium (120-160 BPM)']++;
+        } else if (bpm <= 200) {
+          bpmRanges['Fast (160-200 BPM)']++;
+        } else {
+          bpmRanges['Very Fast (> 200 BPM)']++;
+        }
+      });
+      
+      console.log('\n🎵 BPM Distribution:');
+      Object.entries(bpmRanges).forEach(([range, count]) => {
+        if (count > 0) {
+          const percentage = ((count / totalCharts) * 100).toFixed(1);
+          console.log(`   ${range}: ${count} charts (${percentage}%)`);
+        }
+      });
+      
+      // Difficulty analysis
+      const difficultyStats = {
+        'Beginner (< 3.0)': 0,
+        'Easy (3.0-5.0)': 0,
+        'Medium (5.0-7.0)': 0,
+        'Hard (7.0-8.5)': 0,
+        'Expert (> 8.5)': 0
+      };
+      
+      allCharts.forEach(chart => {
+        const maxDiff = Math.max(...chart.difficulties);
+        if (maxDiff < 3.0) {
+          difficultyStats['Beginner (< 3.0)']++;
+        } else if (maxDiff < 5.0) {
+          difficultyStats['Easy (3.0-5.0)']++;
+        } else if (maxDiff < 7.0) {
+          difficultyStats['Medium (5.0-7.0)']++;
+        } else if (maxDiff < 8.5) {
+          difficultyStats['Hard (7.0-8.5)']++;
+        } else {
+          difficultyStats['Expert (> 8.5)']++;
+        }
+      });
+      
+      console.log('\n🎯 Difficulty Distribution (by highest difficulty):');
+      Object.entries(difficultyStats).forEach(([range, count]) => {
+        if (count > 0) {
+          const percentage = ((count / totalCharts) * 100).toFixed(1);
+          console.log(`   ${range}: ${count} charts (${percentage}%)`);
+        }
+      });
+      
+      // Download URL analysis
+      const urlTypes = {
+        'Google Drive Folders': 0,
+        'Google Drive Files': 0,
+        'Direct Links': 0,
+        'Blog Posts': 0,
+        'Other': 0
+      };
+      
+      allCharts.forEach(chart => {
+        const url = chart.downloadUrl;
+        if (url.includes('drive.google.com/drive/folders/')) {
+          urlTypes['Google Drive Folders']++;
+        } else if (url.includes('drive.google.com/file/d/') || url.includes('drive.google.com/uc?')) {
+          urlTypes['Google Drive Files']++;
+        } else if (url.includes('blogspot.com')) {
+          urlTypes['Blog Posts']++;
+        } else if (url.includes('http')) {
+          urlTypes['Direct Links']++;
+        } else {
+          urlTypes['Other']++;
+        }
+      });
+      
+      console.log('\n🔗 Download URL Types:');
+      Object.entries(urlTypes).forEach(([type, count]) => {
+        if (count > 0) {
+          const percentage = ((count / totalCharts) * 100).toFixed(1);
+          console.log(`   ${type}: ${count} charts (${percentage}%)`);
+        }
+      });
+      
+      // Recent additions
+      const now = new Date();
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const recentCharts = allCharts.filter(chart => chart.createdAt > oneDayAgo).length;
+      const weeklyCharts = allCharts.filter(chart => chart.createdAt > oneWeekAgo).length;
+      
+      console.log('\n📈 Recent Activity:');
+      console.log(`   Added in last 24h: ${recentCharts} charts`);
+      console.log(`   Added in last week: ${weeklyCharts} charts`);
+      
+      // Top artists
+      const artistCounts = new Map<string, number>();
+      allCharts.forEach(chart => {
+        const artist = chart.artist;
+        artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
+      });
+      
+      const topArtists = Array.from(artistCounts.entries())
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5);
+      
+      console.log('\n🎤 Top Artists:');
+      topArtists.forEach(([artist, count], index) => {
+        console.log(`   ${index + 1}. ${artist}: ${count} charts`);
+      });
+      
+      if (options.verbose) {
+        console.log('\n📊 Detailed Source Breakdown:');
+        for (const [source, count] of Object.entries(sourceStats)) {
+          console.log(`\n📂 ${source} (${count} charts):`);
+          
+          const sourceCharts = allCharts.filter(c => c.source === source);
+          
+          // BPM range for this source
+          const sourceBpms = sourceCharts.map(c => parseInt(c.bpm)).filter(bpm => !isNaN(bpm));
+          if (sourceBpms.length > 0) {
+            const minBpm = Math.min(...sourceBpms);
+            const maxBpm = Math.max(...sourceBpms);
+            const avgBpm = Math.round(sourceBpms.reduce((a, b) => a + b, 0) / sourceBpms.length);
+            console.log(`   BPM Range: ${minBpm}-${maxBpm} (avg: ${avgBpm})`);
+          }
+          
+          // Difficulty range for this source
+          const sourceDiffs = sourceCharts.flatMap(c => c.difficulties).filter(d => d > 0);
+          if (sourceDiffs.length > 0) {
+            const minDiff = Math.min(...sourceDiffs).toFixed(1);
+            const maxDiff = Math.max(...sourceDiffs).toFixed(1);
+            const avgDiff = (sourceDiffs.reduce((a, b) => a + b, 0) / sourceDiffs.length).toFixed(1);
+            console.log(`   Difficulty Range: ${minDiff}-${maxDiff} (avg: ${avgDiff})`);
+          }
+          
+          // Recent charts from this source
+          const recentFromSource = sourceCharts.filter(c => c.createdAt > oneWeekAgo).length;
+          if (recentFromSource > 0) {
+            console.log(`   Added this week: ${recentFromSource} charts`);
+          }
+        }
+      }
+      
+      console.log('\n💡 Tips:');
+      console.log('   • Use --verbose for detailed source breakdown');
+      console.log('   • Run "search" to find specific charts');
+      console.log('   • Run "download-estimate" to plan downloads');
       
       service.close();
       
     } catch (error) {
-      console.error('❌ Failed to get statistics:', error);
+      console.error('❌ Status check failed:', error);
       process.exit(1);
     }
   });
@@ -328,6 +507,319 @@ program
       process.exit(1);
     }
   });
+
+program
+  .command('download')
+  .description('Download charts by query (requires at least one filter)')
+  .option('-s, --source <source>', 'Download charts from specific source (REQUIRED or use other filters)')
+  .option('-a, --artist <artist>', 'Download charts by artist (partial match)')
+  .option('-t, --title <title>', 'Download charts by title (partial match)')
+  .option('--min-bpm <bpm>', 'Minimum BPM filter', (value) => parseInt(value))
+  .option('--max-bpm <bpm>', 'Maximum BPM filter', (value) => parseInt(value))
+  .option('-l, --limit <count>', 'Limit number of downloads (max 50)', (value) => parseInt(value))
+  .option('-d, --dir <directory>', 'Download directory', path.join(os.homedir(), 'Downloads', 'DTX'))
+  .option('--overwrite', 'Overwrite existing files')
+  .option('-c, --concurrent <count>', 'Max concurrent downloads', (value) => parseInt(value), 3)
+  .option('--timeout <ms>', 'Download timeout in milliseconds', (value) => parseInt(value), 30000)
+  .option('--no-organize', 'Don\'t organize downloads by source')
+  .action(async (options: any) => {
+    try {
+      // Require at least one filter to prevent downloading everything
+      const hasFilter = options.source || options.artist || options.title || 
+                       options.minBpm || options.maxBpm || options.limit;
+      
+      if (!hasFilter) {
+        console.error('❌ Error: At least one filter is required to prevent downloading all charts.');
+        console.error('Use --source, --artist, --title, --min-bpm, --max-bpm, or --limit');
+        console.error('Example: dtx-download download --artist "Dream Theater" --limit 10');
+        process.exit(1);
+      }
+      
+      // Enforce reasonable limits
+      if (options.limit && options.limit > 50) {
+        console.error('❌ Error: Maximum limit is 50 charts per download command');
+        console.error('Use multiple smaller downloads or be more specific with filters');
+        process.exit(1);
+      }
+      
+      const service = await initializeScrapingService();
+      const db = service.getDatabase();
+      const downloadService = new DownloadService(db);
+      
+      // Build query options
+      const query: any = {};
+      if (options.source) query.source = options.source;
+      if (options.artist) query.artist = options.artist;
+      if (options.title) query.title = options.title;
+      if (options.minBpm) query.minBpm = options.minBpm;
+      if (options.maxBpm) query.maxBpm = options.maxBpm;
+      if (options.limit) query.limit = Math.min(options.limit, 50);
+      
+      // Download options
+      const downloadOptions = {
+        downloadDir: options.dir,
+        organizeBySource: options.organize !== false,
+        overwrite: options.overwrite || false,
+        maxConcurrency: options.concurrent,
+        timeout: options.timeout
+      };
+      
+      console.log('🎵 DTX Chart Downloader (Query Mode)');
+      console.log(`📁 Download directory: ${downloadOptions.downloadDir}`);
+      console.log('🔍 Applied filters:');
+      if (query.source) console.log(`   Source: ${query.source}`);
+      if (query.artist) console.log(`   Artist: ${query.artist}`);
+      if (query.title) console.log(`   Title: ${query.title}`);
+      if (query.minBpm) console.log(`   Min BPM: ${query.minBpm}`);
+      if (query.maxBpm) console.log(`   Max BPM: ${query.maxBpm}`);
+      if (query.limit) console.log(`   Limit: ${query.limit}`);
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(downloadOptions.downloadDir)) {
+        fs.mkdirSync(downloadOptions.downloadDir, { recursive: true });
+      }
+      
+      // Check available disk space
+      try {
+        const stats = await downloadService.checkDiskSpace(downloadOptions.downloadDir);
+        console.log(`💾 Available space: ${formatBytes(stats.free)}`);
+      } catch (error) {
+        console.warn('⚠️  Could not check disk space');
+      }
+      
+      // Start download
+      await downloadService.downloadChartsByQuery(query, downloadOptions);
+      
+      service.close();
+      
+    } catch (error) {
+      console.error('❌ Download failed:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('download-by-id')
+  .description('Download specific charts by ID (max 20 charts)')
+  .argument('<ids...>', 'Chart IDs to download (max 20)')
+  .option('-d, --dir <directory>', 'Download directory', path.join(os.homedir(), 'Downloads', 'DTX'))
+  .option('--overwrite', 'Overwrite existing files')
+  .option('-c, --concurrent <count>', 'Max concurrent downloads', (value) => parseInt(value), 3)
+  .option('--timeout <ms>', 'Download timeout in milliseconds', (value) => parseInt(value), 30000)
+  .option('--no-organize', 'Don\'t organize downloads by source')
+  .option('--confirm', 'Confirm download without prompting')
+  .action(async (ids: string[], options: any) => {
+    try {
+      // Limit the number of charts that can be downloaded by ID
+      if (ids.length > 20) {
+        console.error('❌ Error: Maximum 20 charts can be downloaded by ID at once');
+        console.error('Use the query-based download for larger batches');
+        process.exit(1);
+      }
+      
+      const service = await initializeScrapingService();
+      const db = service.getDatabase();
+      const downloadService = new DownloadService(db);
+      
+      // Verify that all IDs exist in database
+      console.log('🔍 Verifying chart IDs...');
+      const validCharts: string[] = [];
+      const invalidCharts: string[] = [];
+      
+      for (const id of ids) {
+        const chart = await db.getChart(id);
+        if (chart) {
+          validCharts.push(id);
+        } else {
+          invalidCharts.push(id);
+        }
+      }
+      
+      if (invalidCharts.length > 0) {
+        console.warn(`⚠️  Invalid chart IDs found: ${invalidCharts.join(', ')}`);
+      }
+      
+      if (validCharts.length === 0) {
+        console.error('❌ No valid chart IDs found');
+        process.exit(1);
+      }
+      
+      // Show what will be downloaded and ask for confirmation
+      if (!options.confirm) {
+        console.log(`\n📦 Ready to download ${validCharts.length} charts:`);
+        for (const id of validCharts) {
+          const chart = await db.getChart(id);
+          if (chart) {
+            console.log(`   - ${chart.title} - ${chart.artist} (${chart.source})`);
+          }
+        }
+        
+        // In a real CLI, you'd prompt for confirmation here
+        // For now, require the --confirm flag
+        console.log('\n❓ Use --confirm flag to proceed with download');
+        process.exit(0);
+      }
+      
+      const downloadOptions = {
+        downloadDir: options.dir,
+        organizeBySource: options.organize !== false,
+        overwrite: options.overwrite || false,
+        maxConcurrency: options.concurrent,
+        timeout: options.timeout
+      };
+      
+      console.log('🎵 DTX Chart Downloader (ID Mode)');
+      console.log(`📁 Download directory: ${downloadOptions.downloadDir}`);
+      console.log(`🎯 Downloading ${validCharts.length} specific charts`);
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(downloadOptions.downloadDir)) {
+        fs.mkdirSync(downloadOptions.downloadDir, { recursive: true });
+      }
+      
+      await downloadService.downloadChartsById(validCharts, downloadOptions);
+      
+      service.close();
+      
+    } catch (error) {
+      console.error('❌ Download failed:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('download-estimate')
+  .description('Estimate download size for a query')
+  .option('-s, --source <source>', 'Filter by source')
+  .option('-a, --artist <artist>', 'Filter by artist (partial match)')
+  .option('-t, --title <title>', 'Filter by title (partial match)')
+  .option('--min-bpm <bpm>', 'Minimum BPM filter', (value) => parseInt(value))
+  .option('--max-bpm <bpm>', 'Maximum BPM filter', (value) => parseInt(value))
+  .option('-l, --limit <count>', 'Limit number of charts', (value) => parseInt(value))
+  .action(async (options: any) => {
+    try {
+      const service = await initializeScrapingService();
+      const db = service.getDatabase();
+      const downloadService = new DownloadService(db);
+      
+      // Build query options
+      const query: any = {};
+      if (options.source) query.source = options.source;
+      if (options.artist) query.artist = options.artist;
+      if (options.title) query.title = options.title;
+      if (options.minBpm) query.minBpm = options.minBpm;
+      if (options.maxBpm) query.maxBpm = options.maxBpm;
+      if (options.limit) query.limit = options.limit;
+      
+      console.log('📊 Download Size Estimation');
+      
+      const charts = await db.queryCharts(query);
+      const estimate = downloadService.estimateDownloadSize(charts);
+      
+      console.log(`📦 Charts matching query: ${charts.length}`);
+      console.log(`💾 Estimated download size: ${formatBytes(estimate.estimated)}`);
+      console.log(`ℹ️  ${estimate.note}`);
+      
+      service.close();
+      
+    } catch (error) {
+      console.error('❌ Estimation failed:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('browse')
+  .description('Open Google Drive folders for manual chart download')
+  .option('-s, --source <source>', 'Browse charts from specific source')
+  .option('-a, --artist <artist>', 'Browse charts by artist (partial match)')
+  .option('-t, --title <title>', 'Browse charts by title (partial match)')
+  .option('--min-bpm <bpm>', 'Minimum BPM filter', (value) => parseInt(value))
+  .option('--max-bpm <bpm>', 'Maximum BPM filter', (value) => parseInt(value))
+  .option('-l, --limit <count>', 'Limit number of results', (value) => parseInt(value))
+  .action(async (options: any) => {
+    try {
+      const service = await initializeScrapingService();
+      const db = service.getDatabase();
+      
+      // Build query options
+      const query: any = {};
+      if (options.source) query.source = options.source;
+      if (options.artist) query.artist = options.artist;
+      if (options.title) query.title = options.title;
+      if (options.minBpm) query.minBpm = options.minBpm;
+      if (options.maxBpm) query.maxBpm = options.maxBpm;
+      if (options.limit) query.limit = options.limit;
+      
+      console.log('🌐 DTX Chart Browser');
+      
+      const charts = await db.queryCharts(query);
+      
+      if (charts.length === 0) {
+        console.log('❌ No charts found matching query');
+        service.close();
+        return;
+      }
+      
+      // Group charts by their download URLs (folder URLs)
+      const folderGroups = new Map<string, typeof charts>();
+      
+      charts.forEach(chart => {
+        const url = chart.downloadUrl;
+        if (!folderGroups.has(url)) {
+          folderGroups.set(url, []);
+        }
+        folderGroups.get(url)!.push(chart);
+      });
+      
+      console.log(`📦 Found ${charts.length} charts in ${folderGroups.size} folders:\n`);
+      
+      folderGroups.forEach((folderCharts, folderUrl) => {
+        if (folderUrl.includes('drive.google.com/drive/folders/')) {
+          console.log(`📁 Google Drive Folder (${folderCharts.length} charts):`);
+          console.log(`   🔗 ${folderUrl}`);
+          console.log(`   📋 Charts in this folder:`);
+          folderCharts.slice(0, 5).forEach(chart => {
+            console.log(`      - #${chart.id.split('-').pop()} ${chart.title} by ${chart.artist}`);
+          });
+          if (folderCharts.length > 5) {
+            console.log(`      ... and ${folderCharts.length - 5} more charts`);
+          }
+          console.log('');
+        } else {
+          console.log(`🔗 Individual Downloads (${folderCharts.length} charts):`);
+          folderCharts.slice(0, 3).forEach(chart => {
+            console.log(`   - ${chart.title} by ${chart.artist}`);
+            console.log(`     🔗 ${chart.downloadUrl}`);
+          });
+          if (folderCharts.length > 3) {
+            console.log(`   ... and ${folderCharts.length - 3} more charts`);
+          }
+          console.log('');
+        }
+      });
+      
+      console.log('💡 Tip: Use the download command to automatically handle direct downloads');
+      console.log('   For Google Drive folders, you\'ll need to manually download specific charts');
+      
+      service.close();
+      
+    } catch (error) {
+      console.error('❌ Browse failed:', error);
+      process.exit(1);
+    }
+  });
+
+// Helper function to format bytes
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 program
   .command('config')

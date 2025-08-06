@@ -116,6 +116,23 @@
                             </button>
                         </div>
                         
+                        <!-- Selected Songs Panel -->
+                        <div class="selected-songs-panel" id="selectedSongsPanel">
+                            <div class="selected-songs-header">
+                                <h4><i class="fas fa-list"></i> Selected Songs (<span id="selectedSongsCount">0</span>)</h4>
+                                <button class="btn btn-sm btn-outline" id="clearAllSelectedBtn" title="Clear all selections">
+                                    <i class="fas fa-times"></i> Clear All
+                                </button>
+                            </div>
+                            <div class="selected-songs-list" id="selectedSongsList">
+                                <div class="no-selection-message">
+                                    <i class="fas fa-music"></i>
+                                    <p>No songs selected</p>
+                                    <p class="text-muted">Select charts from the grid to see them here</p>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <button class="btn btn-success btn-lg" id="downloadSelectedBtn" disabled>
                             <i class="fas fa-download"></i> Download Selected
                         </button>

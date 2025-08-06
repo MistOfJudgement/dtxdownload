@@ -10,12 +10,24 @@ coverage/
 .nyc_output/
 .DS_Store
 Thumbs.db
+# Database files (generated)
 *.sqlite
 *.db
+charts.db
+
+# Downloaded content (generated)
 downloads/
 temp/
 
-# E2E Test artifacts
+# Build artifacts (generated)
+dist/
+build/
+
+# TypeScript compilation output (generated)
+*.js.map
+*.d.ts
+
+# Test artifacts (generated)
 tests/e2e/test-downloads/
 tests/e2e/test-files/
 tests/e2e/test-full-downloads/
@@ -23,3 +35,8 @@ tests/e2e/test-full-workflow.db
 tests/e2e/test-scraping.db
 tests/e2e/**/*.zip
 tests/e2e/**/*.db
+
+# Package artifacts (generated)
+google-chrome-stable.deb
+*.zip
+*.tar.gz

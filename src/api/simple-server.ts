@@ -50,7 +50,7 @@ export class DTXApiServer {
     this.app.use(express.json());
     
     // Serve GUI files from both root and /gui path with proper MIME types
-    const guiPath = path.join(__dirname, '../gui');
+    const guiPath = path.join(__dirname, '../../gui');
     
     // Set proper MIME types for static files
     this.app.use((req, res, next) => {
@@ -101,6 +101,8 @@ export class DTXApiServer {
         const charts = await this.database.queryCharts(queryOptions);
         
         const totalCount = await this.database.getTotalChartCount();
+        
+        console.log(`Found ${charts.length} charts, total count: ${totalCount}`);
         
         res.json({
           charts: charts.map(chart => ({
@@ -303,7 +305,8 @@ export class DTXApiServer {
 
 // Start server if called directly
 if (require.main === module) {
-  const server = new DTXApiServer();
+  const dbPath = process.env.DB_PATH || './charts.db';
+  const server = new DTXApiServer(dbPath);
   
   // Graceful shutdown
   process.on('SIGTERM', () => {

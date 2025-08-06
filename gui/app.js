@@ -1,6 +1,11 @@
 /**
  * DTX Download Manager - Frontend Application
  * Connects to the optimized backend services for chart management and downloading
+ * 
+ * @fileoverview Main application class for DTX Download Manager
+ * @typedef {import('./types.js').IChart} IChart
+ * @typedef {import('./types.js').FilterConfig} FilterConfig
+ * @typedef {import('./types.js').DownloadOptions} DownloadOptions
  */
 
 class DTXDownloadManager {
@@ -52,14 +57,15 @@ class DTXDownloadManager {
 
     // Validate chart data consistency
     validateChart(chart) {
-        const issues = [];
+        const errors = [];
+        const warnings = [];
         
         // Check for missing required fields
         if (!chart.title || chart.title.trim() === '') {
-            issues.push('Missing title');
+            errors.push('Missing title');
         }
         if (!chart.artist || chart.artist.trim() === '') {
-            issues.push('Missing artist');
+            errors.push('Missing artist');
         }
         
         // Check for mismatched language/encoding in title-artist pairs
@@ -68,27 +74,29 @@ class DTXDownloadManager {
         
         // Warn about potentially mismatched language pairs (not an error, just a warning)
         if (hasJapanese !== artistHasJapanese) {
-            issues.push(`Language mismatch: "${chart.title}" by "${chart.artist}"`);
+            warnings.push(`Language mismatch: "${chart.title}" by "${chart.artist}"`);
         }
         
         // Validate BPM format
         if (chart.bpm && !/^\d+(-\d+)?$/.test(chart.bpm)) {
-            issues.push('Invalid BPM format');
+            errors.push('Invalid BPM format');
         }
         
         // Validate difficulties
         if (!Array.isArray(chart.difficulties) || chart.difficulties.length === 0) {
-            issues.push('Missing or invalid difficulties');
+            errors.push('Missing or invalid difficulties');
         }
         
         // Validate download URL
         if (!chart.downloadUrl || !/^https?:\/\/.+/.test(chart.downloadUrl)) {
-            issues.push('Invalid download URL');
+            errors.push('Invalid download URL');
         }
         
         return {
-            isValid: issues.length === 0,
-            issues: issues
+            isValid: errors.length === 0,
+            errors: errors,
+            warnings: warnings,
+            issues: [...errors, ...warnings]  // Keep for backward compatibility
         };
     }
 
@@ -100,9 +108,12 @@ class DTXDownloadManager {
         this.charts = this.charts.filter(chart => {
             const validation = this.validateChart(chart);
             if (!validation.isValid) {
-                console.warn(`Removing invalid chart: ${chart.title} by ${chart.artist}`, validation.issues);
+                console.warn(`Removing invalid chart: ${chart.title} by ${chart.artist}`, validation.errors);
                 removed++;
                 return false;
+            }
+            if (validation.warnings.length > 0) {
+                console.info(`Chart has warnings: ${chart.title} by ${chart.artist}`, validation.warnings);
             }
             cleaned++;
             return true;
@@ -152,6 +163,9 @@ class DTXDownloadManager {
         document.getElementById('downloadSelectedBtn').addEventListener('click', () => this.startDownload());
         document.getElementById('closeDownloadModal').addEventListener('click', () => this.hideDownloadModal());
         document.getElementById('cancelDownloadBtn').addEventListener('click', () => this.cancelDownload());
+        
+        // Selected songs panel
+        document.getElementById('clearAllSelectedBtn').addEventListener('click', () => this.clearAllSelected());
         
         // Directory selection
         document.getElementById('selectDirBtn').addEventListener('click', () => this.selectDownloadDirectory());
@@ -575,6 +589,7 @@ class DTXDownloadManager {
         this.renderCharts();
         this.updateStats();
         this.updateDownloadButton();
+        this.updateSelectedSongsPanel();
     }
 
     // Toggle chart selection
@@ -588,6 +603,7 @@ class DTXDownloadManager {
         this.updateStats();
         this.updateDownloadButton();
         this.updateSelectAllCheckbox();
+        this.updateSelectedSongsPanel();
     }
 
     // Update select all checkbox state
@@ -696,7 +712,7 @@ class DTXDownloadManager {
                     <span class="checkmark"></span>
                 </label>
             </div>
-            <img src="${chart.previewImageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4='}" alt="${chart.title}" class="chart-image" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4='">
+                        <img src="${chart.imageUrl || chart.previewImageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4='}" alt="${chart.title}" class="chart-image" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y0ZjRmNCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4='">"
             <div class="chart-content">
                 <div class="chart-title" title="${chart.title}">${chart.title}</div>
                 <div class="chart-artist" title="${chart.artist}">${chart.artist}</div>
@@ -739,7 +755,7 @@ class DTXDownloadManager {
                 <input type="checkbox" ${this.selectedCharts.has(chart.id) ? 'checked' : ''}>
                 <span class="checkmark"></span>
             </label>
-            <img src="${chart.previewImageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjZjRmNGY0Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}" alt="${chart.title}" class="list-image" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjZjRmNGY0Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='">
+                        <img src="${chart.imageUrl || chart.previewImageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjZjRmNGY0Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}" alt="${chart.title}" class="list-image" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjZjRmNGY0Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='">"
             <div class="list-title" title="${chart.title}">${chart.title}</div>
             <div class="list-artist hide-mobile" title="${chart.artist}">${chart.artist}</div>
             <div class="hide-mobile">${chart.bpm} BPM</div>
@@ -804,14 +820,43 @@ class DTXDownloadManager {
         try {
             // Get download options
             const options = {
+                chartIds: Array.from(this.selectedCharts),
                 downloadDir: document.getElementById('downloadDir').value || './downloads',
+                maxConcurrency: 3,
                 autoUnzip: document.getElementById('autoUnzip').checked,
                 organizeSongFolders: document.getElementById('organizeFolders').checked,
                 deleteZipAfterExtraction: document.getElementById('deleteZip').checked
             };
             
-            // Simulate download process (replace with actual API call)
-            await this.simulateDownload(selectedChartObjects, options);
+            if (this.isOnline) {
+                // Use real backend API for downloading
+                this.addDownloadLogEntry(`Starting download of ${selectedChartObjects.length} charts...`, 'info');
+                const result = await this.apiClient.startDownload(options);
+                
+                // Process results
+                let successful = 0;
+                let failed = 0;
+                
+                if (result.results) {
+                    for (const downloadResult of result.results) {
+                        if (downloadResult.success) {
+                            this.addDownloadLogEntry(`✓ Downloaded: ${downloadResult.title} - ${downloadResult.artist}`, 'success');
+                            successful++;
+                        } else {
+                            this.addDownloadLogEntry(`✗ Failed: ${downloadResult.title} - ${downloadResult.error || 'Unknown error'}`, 'error');
+                            failed++;
+                        }
+                        this.updateDownloadProgress(successful + failed, selectedChartObjects.length);
+                    }
+                }
+                
+                this.addDownloadLogEntry(`Download complete: ${successful} successful, ${failed} failed`, successful > 0 ? 'success' : 'error');
+                
+            } else {
+                // Fallback to simulation for offline mode
+                this.addDownloadLogEntry('Backend not available, simulating download...', 'info');
+                await this.simulateDownload(selectedChartObjects, options);
+            }
             
         } catch (error) {
             console.error('Download failed:', error);
@@ -899,6 +944,64 @@ class DTXDownloadManager {
         button.innerHTML = this.selectedCharts.size === 0 
             ? '<i class="fas fa-download"></i> Download Selected'
             : `<i class="fas fa-download"></i> Download ${this.selectedCharts.size} Charts`;
+    }
+
+    // Clear all selected charts
+    clearAllSelected() {
+        this.selectedCharts.clear();
+        this.renderCharts();
+        this.updateStats();
+        this.updateDownloadButton();
+        this.updateSelectedSongsPanel();
+        this.updateSelectAllCheckbox();
+    }
+
+    // Update the selected songs panel
+    updateSelectedSongsPanel() {
+        const panel = document.getElementById('selectedSongsPanel');
+        const countElement = document.getElementById('selectedSongsCount');
+        const listElement = document.getElementById('selectedSongsList');
+        const clearAllBtn = document.getElementById('clearAllSelectedBtn');
+        
+        countElement.textContent = this.selectedCharts.size;
+        clearAllBtn.disabled = this.selectedCharts.size === 0;
+        
+        if (this.selectedCharts.size === 0) {
+            listElement.innerHTML = `
+                <div class="no-selection-message">
+                    <i class="fas fa-music"></i>
+                    <p>No songs selected</p>
+                    <p class="text-muted">Select charts from the grid to see them here</p>
+                </div>
+            `;
+        } else {
+            const selectedChartObjects = this.charts.filter(chart => this.selectedCharts.has(chart.id));
+            listElement.innerHTML = selectedChartObjects.map(chart => `
+                <div class="selected-song-item" data-chart-id="${chart.id}">
+                    <img src="${chart.imageUrl || chart.previewImageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjOWNhM2FmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Tm88L3RleHQ+PC9zdmc+'}" 
+                         alt="${chart.title}" 
+                         class="selected-song-image"
+                         onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSI4IiBmaWxsPSIjOWNhM2FmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Tm88L3RleHQ+PC9zdmc+'">
+                    <div class="selected-song-info">
+                        <div class="selected-song-title" title="${chart.title}">${chart.title}</div>
+                        <div class="selected-song-artist" title="${chart.artist}">${chart.artist}</div>
+                    </div>
+                    <button class="selected-song-remove" onclick="window.dtxManager.removeSongFromSelection('${chart.id}')" title="Remove from selection">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Remove a specific song from selection
+    removeSongFromSelection(chartId) {
+        this.selectedCharts.delete(chartId);
+        this.renderCharts();
+        this.updateStats();
+        this.updateDownloadButton();
+        this.updateSelectedSongsPanel();
+        this.updateSelectAllCheckbox();
     }
 
     // Update statistics

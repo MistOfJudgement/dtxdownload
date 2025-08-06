@@ -156,6 +156,36 @@ interface ChartDTO {
   tags?: string[];
 }
 
+// Chart validation schema
+interface ChartValidationRules {
+  title: {
+    required: true;
+    minLength: 1;
+    maxLength: 200;
+    pattern?: RegExp; // Optional pattern for title validation
+  };
+  artist: {
+    required: true;
+    minLength: 1;
+    maxLength: 100;
+    pattern?: RegExp; // Optional pattern for artist validation
+  };
+  bpm: {
+    required: true;
+    pattern: /^\d+(-\d+)?$/; // Single BPM or range (e.g., "120" or "120-140")
+  };
+  difficulties: {
+    required: true;
+    minItems: 1;
+    maxItems: 10;
+    itemPattern: /^\d+(\.\d{1,2})?$/; // Decimal with up to 2 places
+  };
+  downloadUrl: {
+    required: true;
+    pattern: /^https?:\/\/.+/; // Valid HTTP/HTTPS URL
+  };
+}
+
 // Download progress response
 interface DownloadProgressResponse {
   downloadId: string;

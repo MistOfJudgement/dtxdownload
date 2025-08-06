@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DTX Download Manager</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-drum"></i>
+                    <h1>DTX Download Manager</h1>
+                </div>
+                <div class="header-stats">
+                    <div class="stat">
+                        <span class="stat-label">Total Charts</span>
+                        <span class="stat-value" id="totalCharts">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Selected</span>
+                        <span class="stat-value" id="selectedCount">0</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-database"></i> Database</h3>
+                    <div class="action-group">
+                        <button class="btn btn-primary" id="scrapeBtn">
+                            <i class="fas fa-spider"></i> Scrape Charts
+                        </button>
+                        <button class="btn btn-secondary" id="importBtn">
+                            <i class="fas fa-file-import"></i> Import Database
+                        </button>
+                        <button class="btn btn-outline btn-sm" id="clearDataBtn" title="Clear all chart data">
+                            <i class="fas fa-trash"></i> Clear Data
+                        </button>
+                        <input type="file" id="importFile" accept=".json,.db" class="hidden">
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-filter"></i> Filters</h3>
+                    <div class="filter-group">
+                        <input type="text" id="searchInput" placeholder="Search songs..." class="search-input">
+                        
+                        <div class="filter-item">
+                            <label for="artistFilter">Artist</label>
+                            <select id="artistFilter" class="filter-select" title="Filter by artist">
+                                <option value="">All Artists</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label for="bpmRange">BPM Range</label>
+                            <div class="range-inputs">
+                                <input type="number" id="bpmMin" placeholder="Min" class="range-input" aria-label="Minimum BPM">
+                                <input type="number" id="bpmMax" placeholder="Max" class="range-input" aria-label="Maximum BPM">
+                            </div>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label for="difficultyRange">Difficulty</label>
+                            <div class="range-inputs">
+                                <input type="number" id="diffMin" placeholder="Min" step="0.1" class="range-input" aria-label="Minimum Difficulty">
+                                <input type="number" id="diffMax" placeholder="Max" step="0.1" class="range-input" aria-label="Maximum Difficulty">
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-outline" id="clearFilters">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-download"></i> Download</h3>
+                    <div class="download-options">
+                        <div class="option-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="autoUnzip" checked>
+                                <span class="checkmark"></span>
+                                Auto-unzip files
+                            </label>
+                        </div>
+                        <div class="option-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="organizeFolders" checked>
+                                <span class="checkmark"></span>
+                                Organize into song folders
+                            </label>
+                        </div>
+                        <div class="option-item">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="deleteZip" checked>
+                                <span class="checkmark"></span>
+                                Delete ZIP after extraction
+                            </label>
+                        </div>
+                        
+                        <div class="option-item">
+                            <label for="downloadDir">Download Directory</label>
+                            <input type="text" id="downloadDir" placeholder="./downloads" class="input">
+                            <button class="btn btn-sm" id="selectDirBtn" title="Select directory">
+                                <i class="fas fa-folder"></i>
+                            </button>
+                        </div>
+                        
+                        <button class="btn btn-success btn-lg" id="downloadSelectedBtn" disabled>
+                            <i class="fas fa-download"></i> Download Selected
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Content Area -->
+            <div class="content">
+                <!-- Toolbar -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="selectAll">
+                            <span class="checkmark"></span>
+                            Select All
+                        </label>
+                        <span class="divider">|</span>
+                        <div class="view-options">
+                            <button class="btn btn-icon active" id="gridViewBtn" title="Grid View">
+                                <i class="fas fa-th"></i>
+                            </button>
+                            <button class="btn btn-icon" id="listViewBtn" title="List View">
+                                <i class="fas fa-list"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="toolbar-right">
+                        <select id="sortSelect" class="sort-select" title="Sort charts by">
+                            <option value="title">Sort by Title</option>
+                            <option value="artist">Sort by Artist</option>
+                            <option value="bpm">Sort by BPM</option>
+                            <option value="difficulty">Sort by Difficulty</option>
+                            <option value="createdAt">Sort by Date Added</option>
+                        </select>
+                        <button class="btn btn-icon" id="sortOrderBtn" title="Sort Order">
+                            <i class="fas fa-sort-amount-down"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Charts Display -->
+                <div class="charts-container">
+                    <div class="loading hidden" id="loadingSpinner">
+                        <div class="spinner"></div>
+                        <p>Loading charts...</p>
+                    </div>
+                    
+                    <div class="empty-state hidden" id="emptyState">
+                        <i class="fas fa-music"></i>
+                        <h3>No charts found</h3>
+                        <p>Start by scraping charts or importing a database</p>
+                        <button class="btn btn-primary" id="startScrapeBtn">
+                            <i class="fas fa-spider"></i> Scrape Charts
+                        </button>
+                    </div>
+                    
+                    <div class="charts-grid hidden" id="chartsGrid">
+                        <!-- Charts will be populated here -->
+                    </div>
+                    
+                    <div class="charts-list hidden" id="chartsList">
+                        <!-- List view will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination hidden" id="pagination">
+                    <button class="btn btn-icon" id="prevPageBtn" disabled title="Previous page" aria-label="Previous page">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="page-info">
+                        Page <span id="currentPage">1</span> of <span id="totalPages">1</span>
+                    </span>
+                    <button class="btn btn-icon" id="nextPageBtn" disabled title="Next page" aria-label="Next page">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <span id="statusMessage">Ready</span>
+            </div>
+            <div class="status-right">
+                <div class="progress-container hidden" id="progressContainer">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <span class="progress-text" id="progressText">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div class="modal hidden" id="scrapeModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Scrape Charts</h3>
+                    <button class="btn btn-icon" id="closeScrapeModal" title="Close scrape modal" aria-label="Close scrape modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="scrapeSource">Source</label>
+                        <select id="scrapeSource" class="input" title="Select chart source to scrape">
+                            <option value="approved-dtx">ApprovedDTX</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Max Pages</label>
+                        <input type="number" id="maxPages" value="1" min="1" max="10" class="input">
+                        <small>More pages = more charts but slower scraping</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="incrementalScrape">
+                            <span class="checkmark"></span>
+                            Incremental (skip existing charts)
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelScrapeBtn">Cancel</button>
+                    <button class="btn btn-primary" id="startScrapeModalBtn">
+                        <i class="fas fa-spider"></i> Start Scraping
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal hidden" id="downloadModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Download Progress</h3>
+                    <button class="btn btn-icon" id="closeDownloadModal" title="Close download modal" aria-label="Close download modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="download-progress">
+                        <div class="progress-item" id="downloadProgressItem">
+                            <div class="progress-header">
+                                <span class="progress-label">Downloading...</span>
+                                <span class="progress-value">0/0</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="downloadProgressFill"></div>
+                            </div>
+                        </div>
+                        <div class="download-log" id="downloadLog">
+                            <!-- Download status messages will appear here -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelDownloadBtn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="api-client.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

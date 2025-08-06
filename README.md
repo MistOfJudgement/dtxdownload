@@ -4,6 +4,9 @@ A modern, feature-rich web application for downloading and managing DTX charts w
 
 ![DTX Download Manager Interface](dtx-main-interface-selected.png)
 
+> ![NOTE]
+> The vast majority of this repository was generated using Github copilot. I had originally implemented a script to aggregate dtxmania charts and auto download them. AI was used to recreate the script with more features.
+
 ## ✨ Features
 
 ### 🎯 Chart Management
@@ -256,6 +259,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
+- **GitHub Copilot**: This repository was created and enhanced using GitHub Copilot, transforming a simple implementation into a feature-rich, production-ready application
 - DTXMania community for chart creation and sharing
 - Modern web APIs for enabling advanced directory selection
 - Contributors and testers who helped improve the application

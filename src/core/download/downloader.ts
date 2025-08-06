@@ -36,6 +36,12 @@ export interface DownloadOptions {
 
   /** Whether to organize extracted files into song folders */
   organizeSongFolders?: boolean;
+
+  /** Whether to create chart-info.txt files (default: false for cleaner organization) */
+  createChartInfo?: boolean;
+
+  /** Chart completion callback */
+  onChartComplete?: (chart: IChart, result: DownloadResult) => void;
 }
 
 export interface DownloadResult {
@@ -158,17 +164,28 @@ export class ChartDownloader {
       const batchResults = await Promise.allSettled(batchPromises);
       
       // Extract results from Promise.allSettled
-      for (const result of batchResults) {
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        const chart = batch[j];
+        
         if (result.status === 'fulfilled') {
           results.push(result.value);
+          // Call completion callback if provided
+          if (options.onChartComplete) {
+            options.onChartComplete(chart, result.value);
+          }
         } else {
           // Handle failed downloads
-          const chart = batch[results.length % batch.length];
-          results.push({
+          const failedResult: DownloadResult = {
             chart,
             success: false,
             error: result.reason instanceof Error ? result.reason.message : String(result.reason)
-          });
+          };
+          results.push(failedResult);
+          // Call completion callback for failed downloads too
+          if (options.onChartComplete) {
+            options.onChartComplete(chart, failedResult);
+          }
         }
       }
       
@@ -468,31 +485,22 @@ export class ChartDownloader {
   }
 
   /**
-   * Attempt to unzip a downloaded file into an organized song folder
+   * Attempt to unzip a downloaded file with smart folder organization
    */
   private async attemptUnzip(zipPath: string, chart: IChart, options: DownloadOptions): Promise<void> {
     try {
       console.log(`📦 Attempting to unzip: ${path.basename(zipPath)}`);
       
-      // Determine extraction directory based on options
-      let extractDir: string;
+      // Create a temporary extraction directory first
+      const zipDir = path.dirname(zipPath);
+      const tempExtractDir = path.join(zipDir, 'temp_extract_' + Date.now());
       
-      if (options.organizeSongFolders !== false) {
-        // Create a song folder based on chart information
-        const zipDir = path.dirname(zipPath);
-        const songFolderName = this.sanitizeFilename(`${chart.title} - ${chart.artist}`);
-        extractDir = path.join(zipDir, 'songs', songFolderName);
-      } else {
-        // Extract to the same directory as the ZIP file
-        extractDir = path.dirname(zipPath);
+      // Ensure the temporary directory exists
+      if (!fs.existsSync(tempExtractDir)) {
+        fs.mkdirSync(tempExtractDir, { recursive: true });
       }
       
-      // Ensure the extraction directory exists
-      if (!fs.existsSync(extractDir)) {
-        fs.mkdirSync(extractDir, { recursive: true });
-      }
-      
-      console.log(`📂 Extracting to: ${extractDir}`);
+      console.log(`📂 Extracting to temporary location: ${tempExtractDir}`);
       
       const { spawn } = require('child_process');
       const os = require('os');
@@ -504,11 +512,11 @@ export class ChartDownloader {
         if (os.platform() === 'win32') {
           // Windows: try PowerShell first
           command = 'powershell';
-          args = ['-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${extractDir}" -Force`];
+          args = ['-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "${tempExtractDir}" -Force`];
         } else {
           // Unix-like systems: use unzip
           command = 'unzip';
-          args = ['-o', zipPath, '-d', extractDir];
+          args = ['-o', zipPath, '-d', tempExtractDir];
         }
         
         const child = spawn(command, args, { stdio: 'pipe' });
@@ -532,10 +540,14 @@ export class ChartDownloader {
           if (stderr) console.log(`   stderr: ${stderr.trim()}`);
           
           if (code === 0) {
-            if (options.organizeSongFolders !== false) {
-              console.log(`✅ Unzipped to song folder: ${path.basename(extractDir)}`);
-            } else {
-              console.log(`✅ Unzipped: ${path.basename(zipPath)}`);
+            // Unzip successful, now organize the files
+            this.organizeExtractedFiles(tempExtractDir, zipDir, chart, options);
+            
+            // Clean up temp directory
+            try {
+              fs.rmSync(tempExtractDir, { recursive: true, force: true });
+            } catch (cleanupError) {
+              console.warn(`⚠️  Could not clean up temp directory: ${cleanupError}`);
             }
             
             // Try to clean up the ZIP file after successful extraction
@@ -543,20 +555,27 @@ export class ChartDownloader {
               this.cleanupZipFile(zipPath);
             }
             
-            // Organize the extracted files if song folders are enabled
-            if (options.organizeSongFolders !== false) {
-              this.organizeExtractedFiles(extractDir, chart);
-            }
-            
             resolve();
           } else {
             console.log(`⚠️  Unzip failed (code ${code}). ZIP file preserved: ${zipPath}`);
+            // Clean up temp directory on failure too
+            try {
+              fs.rmSync(tempExtractDir, { recursive: true, force: true });
+            } catch (cleanupError) {
+              console.warn(`⚠️  Could not clean up temp directory: ${cleanupError}`);
+            }
             resolve(); // Don't fail the download if unzip fails
           }
         });
         
         child.on('error', (error: Error) => {
           console.log(`⚠️  Unzip error: ${error.message}. ZIP file preserved: ${zipPath}`);
+          // Clean up temp directory on error
+          try {
+            fs.rmSync(tempExtractDir, { recursive: true, force: true });
+          } catch (cleanupError) {
+            console.warn(`⚠️  Could not clean up temp directory: ${cleanupError}`);
+          }
           resolve(); // Don't fail the download if unzip fails
         });
       });
@@ -580,12 +599,95 @@ export class ChartDownloader {
   }
 
   /**
-   * Organize extracted files in the song folder
+   * Smart organization of extracted files
    */
-  private organizeExtractedFiles(songFolder: string, chart: IChart): void {
+  private organizeExtractedFiles(tempDir: string, targetDir: string, chart: IChart, options: DownloadOptions): void {
     try {
-      console.log(`🎵 Organizing files in song folder...`);
+      console.log(`🎵 Organizing extracted files...`);
       
+      // Check what was extracted
+      const extractedItems = fs.readdirSync(tempDir, { withFileTypes: true });
+      
+      let finalDestination: string;
+      
+      // Smart folder detection: if ZIP already contains a single folder, use that
+      if (extractedItems.length === 1 && extractedItems[0].isDirectory()) {
+        const singleFolder = extractedItems[0];
+        const singleFolderPath = path.join(tempDir, singleFolder.name);
+        
+        // Check if this folder contains DTX files (indicates it's a song folder)
+        const folderContents = fs.readdirSync(singleFolderPath);
+        const hasDtxFiles = folderContents.some(file => file.toLowerCase().endsWith('.dtx'));
+        
+        if (hasDtxFiles) {
+          // ZIP already contains a proper song folder, use it directly
+          console.log(`📁 Using existing folder structure: ${singleFolder.name}`);
+          finalDestination = path.join(targetDir, 'songs', singleFolder.name);
+          
+          // Move the entire folder
+          if (!fs.existsSync(path.dirname(finalDestination))) {
+            fs.mkdirSync(path.dirname(finalDestination), { recursive: true });
+          }
+          fs.renameSync(singleFolderPath, finalDestination);
+        } else {
+          // Folder doesn't contain DTX files, create a proper song folder
+          this.createSongFolder(tempDir, targetDir, chart, options);
+          return;
+        }
+      } else {
+        // Multiple files or folders, create a song folder to contain them
+        this.createSongFolder(tempDir, targetDir, chart, options);
+        return;
+      }
+      
+      console.log(`✅ Organized to: ${path.basename(finalDestination)}`);
+      
+    } catch (error) {
+      console.log(`⚠️  Could not organize files: ${error instanceof Error ? error.message : String(error)}`);
+      // Fallback: create a song folder anyway
+      this.createSongFolder(tempDir, targetDir, chart, options);
+    }
+  }
+
+  /**
+   * Create a song folder and move all extracted content into it
+   */
+  private createSongFolder(tempDir: string, targetDir: string, chart: IChart, options: DownloadOptions): void {
+    try {
+      // Create a song folder based on chart information
+      const songFolderName = this.sanitizeFilename(`${chart.title} - ${chart.artist}`);
+      const songFolder = path.join(targetDir, 'songs', songFolderName);
+      
+      // Ensure the song folder exists
+      if (!fs.existsSync(songFolder)) {
+        fs.mkdirSync(songFolder, { recursive: true });
+      }
+      
+      // Move all contents from temp directory to song folder
+      const items = fs.readdirSync(tempDir);
+      for (const item of items) {
+        const srcPath = path.join(tempDir, item);
+        const destPath = path.join(songFolder, item);
+        fs.renameSync(srcPath, destPath);
+      }
+      
+      // Optionally create chart info (disabled by default for cleaner organization)
+      if (options.createChartInfo === true) {
+        this.createChartInfoFile(songFolder, chart);
+      }
+      
+      console.log(`✅ Created song folder: ${songFolderName}`);
+      
+    } catch (error) {
+      console.log(`⚠️  Could not create song folder: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Create chart info file (optional)
+   */
+  private createChartInfoFile(songFolder: string, chart: IChart): void {
+    try {
       // Look for DTX files and other important files
       const files = fs.readdirSync(songFolder, { withFileTypes: true });
       let dtxFiles = 0;
@@ -624,7 +726,7 @@ export class ChartDownloader {
       console.log(`📝 Created chart info file: chart-info.txt`);
       
     } catch (error) {
-      console.log(`⚠️  Could not organize files: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`⚠️  Could not create chart info: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

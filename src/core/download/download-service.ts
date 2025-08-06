@@ -25,13 +25,33 @@ export interface DownloadStats {
   totalTime: number;
 }
 
+export interface ProgressState {
+  downloadId: string;
+  totalCharts: number;
+  completedCharts: number;
+  currentChart: string;
+  overallProgress: number;
+}
+
+export interface DownloadOperation {
+  downloadId: string;
+  results: DownloadResult[];
+}
+
+export type ProgressCallback = (downloadId: string, state: ProgressState, progress: IDownloadProgress) => void;
+
 export class DownloadService {
   private downloader: ChartDownloader;
   private database: ChartDatabase;
+  private progressCallback?: ProgressCallback;
 
   constructor(database: ChartDatabase) {
-    this.downloader = new ChartDownloader();
     this.database = database;
+    this.downloader = new ChartDownloader();
+  }
+
+  setProgressCallback(callback: ProgressCallback) {
+    this.progressCallback = callback;
   }
 
   async downloadChartsByQuery(
@@ -58,13 +78,14 @@ export class DownloadService {
     }
 
     console.log(`📦 Found ${charts.length} charts to download`);
-    return this.downloadCharts(charts, options);
+    const operation = await this.downloadChartsWithId(charts, options);
+    return operation.results;
   }
 
   async downloadChartsById(
     chartIds: string[],
     options: DownloadServiceOptions
-  ): Promise<DownloadResult[]> {
+  ): Promise<DownloadOperation> {
     
     console.log('🔍 Loading charts by ID...');
     const charts: IChart[] = [];
@@ -80,22 +101,37 @@ export class DownloadService {
 
     if (charts.length === 0) {
       console.log('❌ No valid charts found');
-      return [];
+      const downloadId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      return { downloadId, results: [] };
     }
 
     console.log(`📦 Found ${charts.length} charts to download`);
-    return this.downloadCharts(charts, options);
+    const operation = await this.downloadChartsWithId(charts, options);
+    return operation;
   }
 
-  private async downloadCharts(
+  private async downloadChartsWithId(
     charts: IChart[],
     options: DownloadServiceOptions
-  ): Promise<DownloadResult[]> {
+  ): Promise<DownloadOperation> {
     
     const startTime = Date.now();
+    const downloadId = `download_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    const onProgress = (_progress: IDownloadProgress) => {
-      // Progress tracking placeholder
+    // Progress tracking for real-time updates
+    const progressState = {
+      downloadId,
+      totalCharts: charts.length,
+      completedCharts: 0,
+      currentChart: '',
+      overallProgress: 0
+    };
+    
+    const onProgress = (progress: IDownloadProgress) => {
+      // Update progress state for SSE
+      if (this.progressCallback) {
+        this.progressCallback(downloadId, progressState, progress);
+      }
     };
 
     const downloadOptions: DownloadOptions = {
@@ -119,11 +155,32 @@ export class DownloadService {
       console.log(`📁 Note: ${folderUrls} charts point to Google Drive folders (will provide folder links)`);
     }
 
-    const results = await this.downloader.downloadCharts(charts, downloadOptions);
+    // Enhanced download options with completion tracking
+    const enhancedDownloadOptions: DownloadOptions = {
+      ...downloadOptions,
+      onProgress: (progress: IDownloadProgress) => {
+        onProgress(progress);
+      },
+      onChartComplete: (chart: IChart, result: DownloadResult) => {
+        progressState.completedCharts++;
+        progressState.overallProgress = (progressState.completedCharts / progressState.totalCharts) * 100;
+        progressState.currentChart = `${chart.title} - ${chart.artist}`;
+        
+        if (this.progressCallback) {
+          this.progressCallback(downloadId, progressState, {
+            downloaded: progressState.completedCharts,
+            total: progressState.totalCharts,
+            status: result.success ? 'completed' : 'failed'
+          });
+        }
+      }
+    };
+
+    const results = await this.downloader.downloadCharts(charts, enhancedDownloadOptions);
     const stats = this.calculateStats(results, startTime);
     this.printResults(stats, results);
 
-    return results;
+    return { downloadId, results };
   }
 
   private calculateStats(results: DownloadResult[], startTime: number): DownloadStats {

@@ -17,6 +17,7 @@ export class DTXApiServer {
   private database: ChartDatabase;
   private scrapingService: ScrapingService;
   private downloadService: DownloadService;
+  private progressStreams: Map<string, Response> = new Map();
   
   constructor(dbPath?: string) {
     this.app = express();
@@ -25,6 +26,11 @@ export class DTXApiServer {
     this.database = new ChartDatabase(dbPath);
     this.scrapingService = new ScrapingService(dbPath);
     this.downloadService = new DownloadService(this.database);
+    
+    // Set up progress callback for real-time updates
+    this.downloadService.setProgressCallback((downloadId, state, progress) => {
+      this.broadcastProgress(downloadId, state, progress);
+    });
     
     // Register scraping strategies
     this.scrapingService.registerStrategy(new ApprovedDtxStrategy());
@@ -207,6 +213,31 @@ export class DTXApiServer {
       });
     });
     
+    // Download progress endpoint (Server-Sent Events)
+    this.app.get('/api/downloads/progress/:downloadId', (req: Request, res: Response) => {
+      const downloadId = req.params.downloadId;
+      
+      // Set SSE headers
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+      });
+      
+      // Store the response stream for progress updates
+      this.progressStreams.set(downloadId, res);
+      
+      // Send initial connection message
+      res.write(`data: ${JSON.stringify({ type: 'connected', downloadId })}\n\n`);
+      
+      // Clean up when client disconnects
+      req.on('close', () => {
+        this.progressStreams.delete(downloadId);
+      });
+    });
+
     // Download endpoints
     this.app.post('/api/downloads', async (req: Request, res: Response) => {
       try {
@@ -218,22 +249,23 @@ export class DTXApiServer {
         }
         
         // Start download process
-        const results = await this.downloadService.downloadChartsById(chartIds, {
+        const operation = await this.downloadService.downloadChartsById(chartIds, {
           downloadDir,
           maxConcurrency: parseInt(maxConcurrency),
           organizeBySource: true,
           overwrite: false
         });
         
-        const successful = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
+        const successful = operation.results.filter(r => r.success).length;
+        const failed = operation.results.filter(r => !r.success).length;
         
         res.json({
+          downloadId: operation.downloadId,
           message: `Download completed: ${successful} successful, ${failed} failed`,
           successful,
           failed,
-          total: results.length,
-          results: results.map(result => ({
+          total: operation.results.length,
+          results: operation.results.map(result => ({
             chartId: result.chart.id,
             title: result.chart.title,
             artist: result.chart.artist,
@@ -278,6 +310,20 @@ export class DTXApiServer {
     this.app.get('/', (_req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, '../gui/index.html'));
     });
+  }
+
+  private broadcastProgress(downloadId: string, state: any, progress: any): void {
+    const stream = this.progressStreams.get(downloadId);
+    if (stream) {
+      const data = JSON.stringify({
+        downloadId,
+        state,
+        progress,
+        timestamp: new Date().toISOString()
+      });
+      
+      stream.write(`data: ${data}\n\n`);
+    }
   }
   
   public async start(port: number = 3001): Promise<void> {

@@ -27,6 +27,8 @@ class DTXDownloadManager {
         // Initialize API client
         this.apiClient = new DTXAPIClient();
         this.isOnline = false;
+        this.selectedDirHandle = null; // For File System Access API
+        this.currentProgressStream = null; // For SSE progress tracking
         
         this.init();
     }
@@ -53,6 +55,7 @@ class DTXDownloadManager {
     init() {
         this.initializeEventListeners();
         this.loadInitialData();
+        this.restoreDownloadDirectory();
     }
 
     // Validate chart data consistency
@@ -811,12 +814,12 @@ class DTXDownloadManager {
     // Start download process
     async startDownload() {
         if (this.selectedCharts.size === 0) return;
-        
+
         const selectedChartObjects = this.charts.filter(chart => this.selectedCharts.has(chart.id));
-        
+
         this.showDownloadModal();
         this.updateDownloadProgress(0, selectedChartObjects.length);
-        
+
         try {
             // Get download options
             const options = {
@@ -827,16 +830,23 @@ class DTXDownloadManager {
                 organizeSongFolders: document.getElementById('organizeFolders').checked,
                 deleteZipAfterExtraction: document.getElementById('deleteZip').checked
             };
-            
+
             if (this.isOnline) {
                 // Use real backend API for downloading
                 this.addDownloadLogEntry(`Starting download of ${selectedChartObjects.length} charts...`, 'info');
+                
+                // Start download and get downloadId for progress tracking
                 const result = await this.apiClient.startDownload(options);
                 
+                if (result.downloadId) {
+                    // Connect to real-time progress stream
+                    this.connectToProgressStream(result.downloadId);
+                }
+
                 // Process results
                 let successful = 0;
                 let failed = 0;
-                
+
                 if (result.results) {
                     for (const downloadResult of result.results) {
                         if (downloadResult.success) {
@@ -846,18 +856,17 @@ class DTXDownloadManager {
                             this.addDownloadLogEntry(`✗ Failed: ${downloadResult.title} - ${downloadResult.error || 'Unknown error'}`, 'error');
                             failed++;
                         }
-                        this.updateDownloadProgress(successful + failed, selectedChartObjects.length);
                     }
                 }
-                
+
                 this.addDownloadLogEntry(`Download complete: ${successful} successful, ${failed} failed`, successful > 0 ? 'success' : 'error');
-                
+
             } else {
                 // Fallback to simulation for offline mode
                 this.addDownloadLogEntry('Backend not available, simulating download...', 'info');
                 await this.simulateDownload(selectedChartObjects, options);
             }
-            
+
         } catch (error) {
             console.error('Download failed:', error);
             this.addDownloadLogEntry('Download failed: ' + error.message, 'error');
@@ -917,6 +926,12 @@ class DTXDownloadManager {
 
     hideDownloadModal() {
         document.getElementById('downloadModal').classList.add('hidden');
+        
+        // Clean up progress stream if active
+        if (this.currentProgressStream) {
+            this.currentProgressStream.close();
+            this.currentProgressStream = null;
+        }
     }
 
     // Cancel download
@@ -927,13 +942,36 @@ class DTXDownloadManager {
     }
 
     // Select download directory (would need file system access)
-    selectDownloadDirectory() {
-        // For web implementation, this would need to use File System Access API
-        // For now, just allow manual input
+    async selectDownloadDirectory() {
+        try {
+            // Try to use File System Access API (Chrome/Edge)
+            if ('showDirectoryPicker' in window) {
+                const dirHandle = await window.showDirectoryPicker();
+                const dirPath = dirHandle.name; // This is limited but works for display
+                
+                // Store the directory handle for later use
+                this.selectedDirHandle = dirHandle;
+                document.getElementById('downloadDir').value = dirPath;
+                
+                // Save to localStorage for next time
+                localStorage.setItem('dtx_last_download_dir', dirPath);
+                
+                this.updateStatus(`Selected directory: ${dirPath}`);
+                return;
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.warn('File System Access API failed:', error);
+            }
+        }
+
+        // Fallback to manual input for unsupported browsers
         const current = document.getElementById('downloadDir').value || './downloads';
-        const newDir = prompt('Enter download directory:', current);
-        if (newDir) {
-            document.getElementById('downloadDir').value = newDir;
+        const newDir = prompt('Enter download directory path:', current);
+        if (newDir && newDir.trim()) {
+            document.getElementById('downloadDir').value = newDir.trim();
+            localStorage.setItem('dtx_last_download_dir', newDir.trim());
+            this.updateStatus(`Download directory set to: ${newDir.trim()}`);
         }
     }
 
@@ -1060,6 +1098,61 @@ class DTXDownloadManager {
         }
     }
 
+    // Connect to real-time progress stream via Server-Sent Events
+    connectToProgressStream(downloadId) {
+        if (!this.isOnline) return;
+
+        try {
+            const eventSource = new EventSource(`/api/downloads/progress/${downloadId}`);
+            
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'connected') {
+                        this.addDownloadLogEntry('📡 Connected to progress stream', 'info');
+                        return;
+                    }
+
+                    // Update progress based on real-time data
+                    if (data.state) {
+                        const { completedCharts, totalCharts, currentChart } = data.state;
+                        this.updateDownloadProgress(completedCharts, totalCharts);
+                        
+                        if (currentChart) {
+                            this.addDownloadLogEntry(`📥 Processing: ${currentChart}`, 'info');
+                        }
+                    }
+                    
+                    // Update individual file progress if available
+                    if (data.progress && data.progress.downloaded !== undefined) {
+                        const percent = data.progress.total 
+                            ? Math.round((data.progress.downloaded / data.progress.total) * 100)
+                            : 0;
+                        
+                        if (data.progress.status === 'downloading' && percent > 0) {
+                            this.addDownloadLogEntry(`📊 Download progress: ${percent}%`, 'info');
+                        }
+                    }
+                    
+                } catch (parseError) {
+                    console.warn('Failed to parse progress data:', parseError);
+                }
+            };
+            
+            eventSource.onerror = (error) => {
+                console.warn('Progress stream error:', error);
+                eventSource.close();
+            };
+            
+            // Store reference to close later
+            this.currentProgressStream = eventSource;
+            
+        } catch (error) {
+            console.error('Failed to connect to progress stream:', error);
+        }
+    }
+
     // Handle keyboard shortcuts
     handleKeyboardShortcuts(event) {
         if (event.ctrlKey || event.metaKey) {
@@ -1113,6 +1206,18 @@ class DTXDownloadManager {
                 console.error('Error clearing data:', error);
                 this.updateStatus('Error clearing data');
             }
+        }
+    }
+
+    // Restore download directory from localStorage
+    restoreDownloadDirectory() {
+        try {
+            const savedDir = localStorage.getItem('dtx_last_download_dir');
+            if (savedDir) {
+                document.getElementById('downloadDir').value = savedDir;
+            }
+        } catch (error) {
+            console.warn('Failed to restore download directory:', error);
         }
     }
 }

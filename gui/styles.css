@@ -157,6 +157,38 @@ body {
     gap: 0.5rem;
 }
 
+/* Directory picker specific styles */
+.directory-picker {
+    display: flex;
+    gap: 5px;
+    align-items: stretch;
+}
+
+.directory-picker .input {
+    flex: 1;
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+.directory-picker .input:focus {
+    background-color: white;
+}
+
+.hidden-input {
+    display: none;
+}
+
+.help-text {
+    color: #666;
+    margin-top: 4px;
+    display: block;
+    font-size: 0.8rem;
+}
+
+.help-text i {
+    margin-right: 4px;
+}
+
 /* Buttons */
 .btn {
     display: inline-flex;

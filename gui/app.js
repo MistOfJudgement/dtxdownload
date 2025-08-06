@@ -28,6 +28,7 @@ class DTXDownloadManager {
         this.apiClient = new DTXAPIClient();
         this.isOnline = false;
         this.selectedDirHandle = null; // For File System Access API
+        this.selectedDirectoryFiles = null; // For webkitdirectory
         this.currentProgressStream = null; // For SSE progress tracking
         
         this.init();
@@ -170,8 +171,14 @@ class DTXDownloadManager {
         // Selected songs panel
         document.getElementById('clearAllSelectedBtn').addEventListener('click', () => this.clearAllSelected());
         
-        // Directory selection
+        // Directory selection with webkitdirectory support
         document.getElementById('selectDirBtn').addEventListener('click', () => this.selectDownloadDirectory());
+        
+        // Make the directory input clickable too for better UX
+        document.getElementById('downloadDir').addEventListener('click', () => this.selectDownloadDirectory());
+        
+        // Handle directory selection via webkitdirectory input
+        document.getElementById('directoryInput').addEventListener('change', (event) => this.handleDirectorySelection(event));
         
         // Modal click outside to close
         document.getElementById('scrapeModal').addEventListener('click', (e) => {
@@ -941,38 +948,94 @@ class DTXDownloadManager {
         this.updateStatus('Download cancelled');
     }
 
-    // Select download directory (would need file system access)
+    // Select download directory using webkitdirectory
     async selectDownloadDirectory() {
         try {
-            // Try to use File System Access API (Chrome/Edge)
+            // Add loading state to button
+            const button = document.getElementById('selectDirBtn');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            button.disabled = true;
+            
+            // Try File System Access API first (Chrome/Edge with better UX)
             if ('showDirectoryPicker' in window) {
-                const dirHandle = await window.showDirectoryPicker();
-                const dirPath = dirHandle.name; // This is limited but works for display
-                
-                // Store the directory handle for later use
-                this.selectedDirHandle = dirHandle;
-                document.getElementById('downloadDir').value = dirPath;
-                
-                // Save to localStorage for next time
-                localStorage.setItem('dtx_last_download_dir', dirPath);
-                
-                this.updateStatus(`Selected directory: ${dirPath}`);
-                return;
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    const dirPath = dirHandle.name; 
+                    
+                    // Store the directory handle for later use
+                    this.selectedDirHandle = dirHandle;
+                    document.getElementById('downloadDir').value = dirPath;
+                    
+                    // Save to localStorage
+                    localStorage.setItem('dtx_last_download_dir', dirPath);
+                    localStorage.setItem('dtx_directory_handle_name', dirPath);
+                    
+                    this.updateStatus(`📁 Selected directory: ${dirPath}`, 'success');
+                    this.highlightDirectoryInput();
+                    return;
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        this.updateStatus('📁 Directory selection cancelled', 'info');
+                        return;
+                    }
+                    // Continue to webkitdirectory fallback
+                    console.log('File System Access API not available, using webkitdirectory');
+                }
             }
+            
+            // Use webkitdirectory input as primary method for broader browser support
+            const directoryInput = document.getElementById('directoryInput');
+            directoryInput.click();
+            
         } catch (error) {
-            if (error.name !== 'AbortError') {
-                console.warn('File System Access API failed:', error);
+            console.error('Directory selection error:', error);
+            this.updateStatus('⚠️ Directory selection failed', 'error');
+        } finally {
+            // Restore button state
+            const button = document.getElementById('selectDirBtn');
+            if (button.innerHTML.includes('spinner')) {
+                button.innerHTML = '<i class="fas fa-folder-open"></i> Browse';
+                button.disabled = false;
             }
         }
+    }
 
-        // Fallback to manual input for unsupported browsers
-        const current = document.getElementById('downloadDir').value || './downloads';
-        const newDir = prompt('Enter download directory path:', current);
-        if (newDir && newDir.trim()) {
-            document.getElementById('downloadDir').value = newDir.trim();
-            localStorage.setItem('dtx_last_download_dir', newDir.trim());
-            this.updateStatus(`Download directory set to: ${newDir.trim()}`);
+    // Handle directory selection from webkitdirectory input
+    handleDirectorySelection(event) {
+        const files = event.target.files;
+        if (files.length > 0) {
+            // Get the directory path from the first file
+            const firstFile = files[0];
+            const fullPath = firstFile.webkitRelativePath;
+            
+            // Extract directory name (first part of the path)
+            const dirName = fullPath.split('/')[0];
+            
+            // Update UI
+            document.getElementById('downloadDir').value = dirName;
+            
+            // Store directory info
+            this.selectedDirectoryFiles = files;
+            localStorage.setItem('dtx_last_download_dir', dirName);
+            
+            this.updateStatus(`📁 Selected directory: ${dirName} (${files.length} files detected)`, 'success');
+            this.highlightDirectoryInput();
+            
+            // Log details for debugging
+            console.log(`📁 Directory selected: ${dirName}`);
+            console.log(`📊 Files detected: ${files.length}`);
+            console.log(`📄 Example file: ${firstFile.webkitRelativePath}`);
         }
+    }
+
+    // Visual feedback helper
+    highlightDirectoryInput() {
+        const input = document.getElementById('downloadDir');
+        input.style.borderColor = '#28a745';
+        setTimeout(() => {
+            input.style.borderColor = '';
+        }, 2000);
     }
 
     // Update download button state
@@ -1209,15 +1272,31 @@ class DTXDownloadManager {
         }
     }
 
-    // Restore download directory from localStorage
+    // Restore download directory from localStorage with enhanced feedback
     restoreDownloadDirectory() {
         try {
             const savedDir = localStorage.getItem('dtx_last_download_dir');
             if (savedDir) {
                 document.getElementById('downloadDir').value = savedDir;
+                console.log(`📁 Restored previous download directory: ${savedDir}`);
+                
+                // Check browser capabilities and inform user
+                if ('showDirectoryPicker' in window) {
+                    console.log('✅ File System Access API available (modern browsers)');
+                } else if (document.createElement('input').webkitdirectory !== undefined) {
+                    console.log('✅ webkitdirectory available (wider browser support)');
+                } else {
+                    console.log('⚠️ Limited directory support - will use manual input');
+                }
+            } else {
+                // Set default directory
+                document.getElementById('downloadDir').value = './downloads';
+                console.log('📁 Using default download directory: ./downloads');
             }
         } catch (error) {
             console.warn('Failed to restore download directory:', error);
+            // Fallback to default
+            document.getElementById('downloadDir').value = './downloads';
         }
     }
 }

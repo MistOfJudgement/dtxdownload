@@ -110,10 +110,16 @@
                         
                         <div class="option-item">
                             <label for="downloadDir">Download Directory</label>
-                            <input type="text" id="downloadDir" placeholder="./downloads" class="input">
-                            <button class="btn btn-sm" id="selectDirBtn" title="Select directory">
-                                <i class="fas fa-folder"></i>
-                            </button>
+                            <div class="directory-picker">
+                                <input type="text" id="downloadDir" placeholder="./downloads" class="input" readonly>
+                                <input type="file" id="directoryInput" webkitdirectory directory multiple class="hidden-input">
+                                <button class="btn btn-sm" id="selectDirBtn" title="Click to select download directory">
+                                    <i class="fas fa-folder-open"></i> Browse
+                                </button>
+                            </div>
+                            <small class="help-text">
+                                <i class="fas fa-info-circle"></i> Click "Browse" to select where to save downloaded charts
+                            </small>
                         </div>
                         
                         <!-- Selected Songs Panel -->

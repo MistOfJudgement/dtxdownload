@@ -41,7 +41,7 @@ interface ScrapeRequest {
 }
 
 export class DTXApiServer {
-  private app: express.Application;
+  public app: express.Application;
   private scrapingService: ScrapingService;
   private downloadService: DownloadService;
   private database: ChartDatabase;
@@ -138,20 +138,49 @@ export class DTXApiServer {
       }
     });
     
-    // GET /api/charts/:id - Get specific chart
-    this.app.get('/api/charts/:id', async (req: Request, res: Response) => {
+        // GET /api/charts/:id - Get specific chart
+    this.app.get('/api/charts/:id', async (req: Request, res: Response): Promise<void> => {
       try {
-        const chartId = req.params.id;
-        const chart = await this.database.getChart(chartId);
-        
+        const chart = await this.database.getChart(req.params.id);
         if (!chart) {
-          return res.status(404).json({ error: 'Chart not found' });
+          res.status(404).json({ error: 'Chart not found' });
+          return;
+        }
+        res.json(chart);
+      } catch (error) {
+        console.error('Error finding chart:', error);
+        res.status(500).json({ error: 'Failed to find chart' });
+      }
+    });
+
+    // GET /api/charts/:id/inspect - Get detailed chart information for debugging
+    this.app.get('/api/charts/:id/inspect', async (req: Request, res: Response): Promise<void> => {
+      try {
+        const chart = await this.database.getChart(req.params.id);
+        if (!chart) {
+          res.status(404).json({ error: 'Chart not found' });
+          return;
         }
         
-        return res.json(chart);
+        // Return detailed information for debugging
+        res.json({
+          chart,
+          downloadUrl: chart.downloadUrl,
+          isGoogleDrive: chart.downloadUrl?.includes('drive.google.com'),
+          urlType: chart.downloadUrl?.includes('/file/') ? 'file' : 
+                   chart.downloadUrl?.includes('/folders/') ? 'folder' : 'unknown',
+          metadata: {
+            hasPreviewImage: !!chart.previewImageUrl,
+            difficulties: chart.difficulties,
+            tags: chart.tags,
+            source: chart.source,
+            createdAt: chart.createdAt,
+            updatedAt: chart.updatedAt
+          }
+        });
       } catch (error) {
-        console.error('Error fetching chart:', error);
-        return res.status(500).json({ error: 'Failed to fetch chart' });
+        console.error('Error inspecting chart:', error);
+        res.status(500).json({ error: 'Failed to inspect chart' });
       }
     });
     
@@ -183,24 +212,50 @@ export class DTXApiServer {
       }
     });
     
-    // GET /api/charts/stats - Get database statistics
+        // GET /api/charts/stats - Get database statistics
     this.app.get('/api/charts/stats', async (_req: Request, res: Response) => {
       try {
-        const totalCharts = await this.database.getTotalChartCount();
-        const chartsBySource = await this.database.getChartCountBySource();
-        const charts = await this.database.queryCharts();
-        const artists = new Set(charts.map(c => c.artist));
+        const totalCount = await this.database.getTotalChartCount();
+        const countBySource = await this.database.getChartCountBySource();
         
         res.json({
-          totalCharts,
-          totalArtists: artists.size,
-          totalSources: Object.keys(chartsBySource).length,
-          chartsBySource,
-          lastUpdated: new Date().toISOString()
+          totalCharts: totalCount,
+          chartsBySource: countBySource,
+          timestamp: new Date().toISOString()
         });
       } catch (error) {
-        console.error('Error fetching stats:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
+        console.error('Error getting chart stats:', error);
+        res.status(500).json({ error: 'Failed to get chart stats' });
+      }
+    });
+
+    // GET /api/debug/database - Debug database state
+    this.app.get('/api/debug/database', async (_req: Request, res: Response) => {
+      try {
+        const totalCount = await this.database.getTotalChartCount();
+        const countBySource = await this.database.getChartCountBySource();
+        const recentCharts = await this.database.queryCharts({ limit: 5, sortBy: 'createdAt', sortOrder: 'DESC' });
+        
+        res.json({
+          totalCharts: totalCount,
+          chartsBySource: countBySource,
+          recentCharts: recentCharts.map(chart => ({
+            id: chart.id,
+            title: chart.title,
+            artist: chart.artist,
+            source: chart.source,
+            hasDownloadUrl: !!chart.downloadUrl,
+            createdAt: chart.createdAt
+          })),
+          databaseInfo: {
+            hasData: totalCount > 0,
+            needsScraping: totalCount === 0
+          },
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Error getting database debug info:', error);
+        res.status(500).json({ error: 'Failed to get database debug info' });
       }
     });
   }
@@ -448,4 +503,10 @@ export class DTXApiServer {
 if (require.main === module) {
   const server = new DTXApiServer();
   server.start().catch(console.error);
+}
+
+// Export for Electron main process
+export function createApp(): express.Application {
+  const server = new DTXApiServer();
+  return server.app;
 }

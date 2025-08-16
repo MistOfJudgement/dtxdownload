@@ -87,6 +87,10 @@ export class DTXDownloadManager {
         DOMUtils.addEventListener('downloadSelectedBtn', 'click', () => this.startDownload());
         DOMUtils.addEventListener('clearAllSelectedBtn', 'click', () => this.clearAllSelected());
         
+        // Directory selection
+        DOMUtils.addEventListener('selectDirBtn', 'click', () => this.selectDownloadDirectory());
+        DOMUtils.addEventListener('directoryInput', 'change', (e) => this.handleDirectorySelection(e));
+        
         // Pagination
         DOMUtils.addEventListener('prevPageBtn', 'click', () => this.previousPage());
         DOMUtils.addEventListener('nextPageBtn', 'click', () => this.nextPage());
@@ -687,6 +691,55 @@ export class DTXDownloadManager {
     private startDownload(): void {
         // Placeholder for download functionality
         console.log('Download started for:', this.selectionManager.getSelectedArray());
+    }
+
+    /**
+     * Open directory selection dialog
+     */
+    private async selectDownloadDirectory(): Promise<void> {
+        try {
+            // Check if running in Electron
+            if (typeof (window as any).electronAPI !== 'undefined') {
+                // Use Electron's native directory dialog
+                const selectedPath = await (window as any).electronAPI.selectDirectory();
+                if (selectedPath) {
+                    DOMUtils.setValue('downloadDir', selectedPath);
+                    StorageService.saveDownloadDirectory(selectedPath);
+                    console.log('Download directory selected:', selectedPath);
+                }
+            } else {
+                // Fallback to web-based directory selection
+                const directoryInput = DOMUtils.getElementById('directoryInput') as HTMLInputElement;
+                if (directoryInput) {
+                    directoryInput.click();
+                }
+            }
+        } catch (error) {
+            console.error('Error selecting directory:', error);
+        }
+    }
+
+    /**
+     * Handle directory selection from file input
+     */
+    private handleDirectorySelection(event: Event): void {
+        const target = event.target as HTMLInputElement;
+        if (target.files && target.files.length > 0) {
+            // Get the first file's path and extract directory
+            const file = target.files[0];
+            const fullPath = (file as any).webkitRelativePath || file.name;
+            
+            // Extract directory path (remove filename)
+            const pathParts = fullPath.split('/');
+            pathParts.pop(); // Remove filename
+            const directoryPath = pathParts.join('/') || './';
+            
+            // Update UI and save to storage
+            DOMUtils.setValue('downloadDir', directoryPath);
+            StorageService.saveDownloadDirectory(directoryPath);
+            
+            console.log('Download directory selected:', directoryPath);
+        }
     }
 
     private handleKeyboardShortcuts(event: KeyboardEvent): void {

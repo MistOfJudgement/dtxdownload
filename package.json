@@ -65,6 +65,7 @@
     "cheerio": "^1.0.0-rc.12",
     "commander": "^11.1.0",
     "cors": "^2.8.5",
+    "electron": "^37.3.0",
     "express": "^5.1.0",
     "extract-zip": "^2.0.1",
     "node-fetch": "^2.7.0",

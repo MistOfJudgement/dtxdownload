@@ -2,7 +2,9 @@
  * Tests for the ApprovedDTX scraping strategy
  */
 
+import * as cheerio from 'cheerio';
 import { ApprovedDtxStrategy } from '../strategies/approved-dtx';
+import testChartBareYourTeeth from './test-data/test-chart-bare-your-teeth';
 
 describe('ApprovedDtxStrategy', () => {
   let strategy: ApprovedDtxStrategy;
@@ -24,6 +26,29 @@ describe('ApprovedDtxStrategy', () => {
   });
 
   describe('extractChartFromElement', () => {
+    it('should extract chart data from "Bare your teeth" HTML element', async () => {
+      // Load the test HTML into cheerio and get the post element
+      const $ = cheerio.load(testChartBareYourTeeth.html);
+      const postElement = $('.post')[0]; // Get the actual DOM element
+      
+      if (!postElement) {
+        throw new Error('Could not find post element in test HTML');
+      }
+      
+      const chart = await strategy.extractChartFromElement(postElement);
+      
+      expect(chart).not.toBeNull();
+      if (chart) {
+        expect(chart.title).toBe(testChartBareYourTeeth.expected.title);
+        expect(chart.artist).toBe(testChartBareYourTeeth.expected.artist);
+        expect(chart.bpm).toBe(testChartBareYourTeeth.expected.bpm);
+        expect(chart.difficulties).toEqual(testChartBareYourTeeth.expected.difficulties);
+        expect(chart.downloadUrl).toBe(testChartBareYourTeeth.expected.downloadUrl);
+        expect(chart.previewImageUrl).toBe(testChartBareYourTeeth.expected.previewImageUrl);
+        expect(chart.source).toBe('approved-dtx');
+      }
+    });
+
     it('should extract chart data from valid element', async () => {
       // Create a mock element that simulates ApprovedDTX HTML structure
       const mockElement = {
@@ -39,11 +64,11 @@ describe('ApprovedDtxStrategy', () => {
       expect(chart).toBeNull();
     });
 
-    it('should return null for invalid element', async () => {
+    it('should throw error for invalid element', async () => {
       const mockElement = {} as any;
       
-      const chart = await strategy.extractChartFromElement(mockElement);
-      expect(chart).toBeNull();
+      await expect(strategy.extractChartFromElement(mockElement))
+        .rejects.toThrow('Failed to extract chart from ApprovedDTX element');
     });
   });
 
@@ -70,4 +95,57 @@ describe('ApprovedDtxStrategy', () => {
       expect(id).toBe('approved-dtx-test-song-test-artist');
     });
   });
+
+  describe('full HTML processing', () => {
+    it('should extract chart data from "Bare your teeth" full HTML page', async () => {
+      // Mock the HTTP client to return the test HTML
+      const mockHttpClient = {
+        get: jest.fn().mockResolvedValue({ body: testChartBareYourTeeth.html })
+      };
+      
+      // Inject the mock HTTP client
+      (strategy as any).httpClient = mockHttpClient;
+      
+      // Use the protected scrapePageWithHtml method to test HTML parsing
+      const source = { name: 'approved-dtx', baseUrl: 'https://approvedtx.blogspot.com/' };
+      const result = await (strategy as any).scrapePageWithHtml(testChartBareYourTeeth.sourceURL, source);
+      
+      expect(result.pageCharts).toHaveLength(1);
+      const chart = result.pageCharts[0];
+      
+      expect(chart.title).toBe(testChartBareYourTeeth.expected.title);
+      expect(chart.artist).toBe(testChartBareYourTeeth.expected.artist);
+      expect(chart.bpm).toBe(testChartBareYourTeeth.expected.bpm);
+      expect(chart.difficulties).toEqual(testChartBareYourTeeth.expected.difficulties);
+      expect(chart.downloadUrl).toBe(testChartBareYourTeeth.expected.downloadUrl);
+      expect(chart.previewImageUrl).toBe(testChartBareYourTeeth.expected.previewImageUrl);
+      expect(chart.source).toBe('approved-dtx');
+    });
+
+    it('should return empty array for invalid HTML', async () => {
+      const mockHttpClient = {
+        get: jest.fn().mockResolvedValue({ body: '<html><body>Invalid content</body></html>' })
+      };
+      
+      (strategy as any).httpClient = mockHttpClient;
+      
+      const source = { name: 'approved-dtx', baseUrl: 'https://approvedtx.blogspot.com/' };
+      const result = await (strategy as any).scrapePageWithHtml('https://approvedtx.blogspot.com/invalid.html', source);
+      
+      expect(result.pageCharts).toHaveLength(0);
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const mockHttpClient = {
+        get: jest.fn().mockRejectedValue(new Error('Network error'))
+      };
+      
+      (strategy as any).httpClient = mockHttpClient;
+      
+      const source = { name: 'approved-dtx', baseUrl: 'https://approvedtx.blogspot.com/' };
+      
+      await expect((strategy as any).scrapePageWithHtml('https://approvedtx.blogspot.com/error.html', source))
+        .rejects.toThrow('Network error');
+    });
+  })
 });

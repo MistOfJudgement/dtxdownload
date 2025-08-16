@@ -10,6 +10,12 @@ import { ScrapingService } from '../scraping/scraping-service';
 import { ApprovedDtxStrategy } from '../scraping/strategies/approved-dtx';
 import { DownloadService } from '../core/download/download-service';
 import { Source } from '../scraping/interfaces';
+import { 
+  DownloadRequest, 
+  LegacyDownloadRequest, 
+  DownloadResponse, 
+  ChartsListResponse
+} from './models';
 
 // Simple API server that can be extended
 export class DTXApiServer {
@@ -110,7 +116,7 @@ export class DTXApiServer {
         
         console.log(`Found ${charts.length} charts, total count: ${totalCount}`);
         
-        res.json({
+        const response: ChartsListResponse = {
           charts: charts.map(chart => ({
             id: chart.id,
             title: chart.title,
@@ -118,14 +124,16 @@ export class DTXApiServer {
             bpm: chart.bpm,
             difficulties: chart.difficulties,
             downloadUrl: chart.downloadUrl,
-            imageUrl: chart.previewImageUrl,
             source: chart.source,
-            createdAt: chart.createdAt?.toISOString(),
-            tags: chart.tags
+            tags: chart.tags,
+            ...(chart.previewImageUrl && { imageUrl: chart.previewImageUrl }),
+            ...(chart.createdAt && { createdAt: chart.createdAt.toISOString() })
           })),
           totalCount,
           hasMore: charts.length === parseInt(limit as string)
-        });
+        };
+        
+        res.json(response);
       } catch (error) {
         console.error('Error fetching charts:', error);
         res.status(500).json({ 
@@ -241,24 +249,54 @@ export class DTXApiServer {
     // Download endpoints
     this.app.post('/api/downloads', async (req: Request, res: Response) => {
       try {
-        const { chartIds, downloadDir = './downloads', maxConcurrency = 3 } = req.body;
+        // Handle both new DownloadRequest format and legacy GUI format
+        const requestBody = req.body;
+        let downloadOptions: DownloadRequest;
+
+        // Check if it's the legacy GUI format
+        if (requestBody.destination && requestBody.options) {
+          // Convert legacy format to new format
+          const legacyRequest = requestBody as LegacyDownloadRequest;
+          downloadOptions = {
+            chartIds: legacyRequest.chartIds,
+            downloadDir: legacyRequest.destination,
+            maxConcurrency: legacyRequest.concurrency || 3,
+            organizeSongFolders: legacyRequest.options.organizeIntoFolders,
+            deleteZipAfterExtraction: legacyRequest.options.deleteZipAfterExtraction,
+            overwrite: !legacyRequest.skipExisting
+          };
+        } else {
+          // Use new format directly
+          downloadOptions = {
+            chartIds: requestBody.chartIds,
+            downloadDir: requestBody.downloadDir || './downloads',
+            maxConcurrency: requestBody.maxConcurrency || 3,
+            organizeSongFolders: requestBody.organizeSongFolders,
+            autoUnzip: requestBody.autoUnzip,
+            deleteZipAfterExtraction: requestBody.deleteZipAfterExtraction,
+            overwrite: requestBody.overwrite || false
+          };
+        }
         
-        if (!chartIds || !Array.isArray(chartIds) || chartIds.length === 0) {
+        if (!downloadOptions.chartIds || !Array.isArray(downloadOptions.chartIds) || downloadOptions.chartIds.length === 0) {
           res.status(400).json({ error: 'chartIds array is required' });
           return;
         }
         
         // Start download process
-        const operation = await this.downloadService.downloadChartsById(chartIds, {
-          downloadDir,
-          maxConcurrency: parseInt(maxConcurrency),
-          overwrite: false
-        });
+        const serviceOptions = {
+          downloadDir: downloadOptions.downloadDir || './downloads',
+          maxConcurrency: downloadOptions.maxConcurrency || 3,
+          overwrite: downloadOptions.overwrite || false,
+          organizeSongFolders: downloadOptions.organizeSongFolders || false
+        };
+        
+        const operation = await this.downloadService.downloadChartsById(downloadOptions.chartIds, serviceOptions);
         
         const successful = operation.results.filter(r => r.success).length;
         const failed = operation.results.filter(r => !r.success).length;
         
-        res.json({
+        const response: DownloadResponse = {
           downloadId: operation.downloadId,
           message: `Download completed: ${successful} successful, ${failed} failed`,
           successful,
@@ -269,12 +307,14 @@ export class DTXApiServer {
             title: result.chart.title,
             artist: result.chart.artist,
             success: result.success,
-            error: result.error,
-            filePath: result.filePath,
-            fileSize: result.fileSize,
-            downloadTime: result.downloadTime
+            ...(result.error && { error: result.error }),
+            ...(result.filePath && { filePath: result.filePath }),
+            ...(result.fileSize && { fileSize: result.fileSize }),
+            ...(result.downloadTime && { downloadTime: result.downloadTime })
           }))
-        });
+        };
+
+        res.json(response);
       } catch (error) {
         console.error('Error during download:', error);
         res.status(500).json({ 

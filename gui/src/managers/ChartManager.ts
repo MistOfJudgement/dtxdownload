@@ -276,6 +276,9 @@ export class ChartManager {
         if (this.charts.length > 0) {
             console.log(`Loaded ${this.charts.length} charts from storage`);
         }
+        
+        // Emit charts-updated event
+        eventBus.emit('charts-updated', this.charts);
     }
 
     /**

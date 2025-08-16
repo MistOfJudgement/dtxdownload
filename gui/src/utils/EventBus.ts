@@ -1,5 +1,19 @@
 /**
- * Simple event bus for communication between modules
+ * Simple     off(event: string, listener?: EventListener): void {
+        if (!this.listeners.has(event)) return;
+        
+        if (!listener) {
+            // Remove all listeners for this event
+            this.listeners.delete(event);
+            return;
+        }
+        
+        const callbacks = this.listeners.get(event)!;
+        const index = callbacks.indexOf(listener);
+        if (index > -1) {
+            callbacks.splice(index, 1);
+        }
+    } for communication between modules
  */
 
 export class EventBus {
@@ -12,13 +26,23 @@ export class EventBus {
         this.listeners.get(event)!.push(callback);
     }
 
-    off(event: string, callback: (...args: any[]) => void): void {
+    off(event: string, callback?: (...args: any[]) => void): void {
         if (!this.listeners.has(event)) return;
         
-        const callbacks = this.listeners.get(event)!;
-        const index = callbacks.indexOf(callback);
-        if (index > -1) {
-            callbacks.splice(index, 1);
+        if (callback) {
+            const callbacks = this.listeners.get(event)!;
+            const index = callbacks.indexOf(callback);
+            if (index > -1) {
+                callbacks.splice(index, 1);
+            }
+            
+            // Remove the event entirely if no listeners remain
+            if (callbacks.length === 0) {
+                this.listeners.delete(event);
+            }
+        } else {
+            // Remove all listeners for this event
+            this.listeners.delete(event);
         }
     }
 

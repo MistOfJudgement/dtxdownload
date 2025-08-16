@@ -48,8 +48,8 @@ function createWindow(): void {
     title: 'DTX Download Manager'
   });
 
-  // Load the GUI
-  mainWindow.loadFile(path.join(__dirname, '../../gui/index.html'));
+  // Load the GUI (built version)
+  mainWindow.loadFile(path.join(__dirname, '../../gui/dist/index.html'));
 
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {

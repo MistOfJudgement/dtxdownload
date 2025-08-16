@@ -8,29 +8,57 @@
  * @typedef {import('./types.js').DownloadOptions} DownloadOptions
  */
 
+/**
+ * DTX Download Manager Application
+ */
+
+// Types and interfaces
+interface Chart {
+    id: string;
+    title: string;
+    artist: string;
+    bpm: string;
+    difficulties: number[];
+    source: string;
+    downloadUrl: string;
+    previewImageUrl?: string;
+    createdAt: Date;
+    updatedAt: Date;
+    tags: string[];
+}
+
+interface FilterConfig {
+    artists: Set<string>;
+    sources: Set<string>;
+    difficulties: { min: number; max: number };
+    bpm: { min: number; max: number };
+}
+
 class DTXDownloadManager {
+    private charts: Chart[] = [];
+    private filteredCharts: Chart[] = [];
+    private selectedCharts: Set<string> = new Set();
+    private currentPage: number = 1;
+    private chartsPerPage: number = 20;
+    private viewMode: 'grid' | 'list' = 'grid';
+    private sortBy: string = 'name';
+    private sortOrder: 'asc' | 'desc' = 'asc';
+    private filterConfig: FilterConfig = {
+        artists: new Set(),
+        sources: new Set(),
+        difficulties: { min: 0, max: 10 },
+        bpm: { min: 60, max: 200 }
+    };
+    private apiClient: DTXAPIClient;
+    private isOnline: boolean = false;
+    private selectedDirHandle: any = null; // For File System Access API
+    private selectedDirectoryFiles: FileList | null = null; // For webkitdirectory
+    private currentProgressStream: EventSource | null = null; // For SSE progress tracking
+    private searchQuery?: string;
+    private isLoading: boolean = false;
+
     constructor() {
-        this.charts = [];
-        this.filteredCharts = [];
-        this.selectedCharts = new Set();
-        this.currentPage = 1;
-        this.chartsPerPage = 20;
-        this.viewMode = 'grid';
-        this.sortBy = 'name';
-        this.sortOrder = 'asc';
-        this.filterConfig = {
-            difficulty: 'all',
-            genre: 'all',
-            search: ''
-        };
-        
-        // Initialize API client
         this.apiClient = new DTXAPIClient();
-        this.isOnline = false;
-        this.selectedDirHandle = null; // For File System Access API
-        this.selectedDirectoryFiles = null; // For webkitdirectory
-        this.currentProgressStream = null; // For SSE progress tracking
-        
         this.init();
     }
 

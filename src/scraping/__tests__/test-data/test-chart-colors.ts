@@ -1,4 +1,4 @@
-import { IChart } from "../../core"
+import { IChart } from "../../../core/models"
 
 export const testChartColorsHTML =
 `<div class="post-outer">

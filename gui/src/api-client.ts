@@ -2,12 +2,26 @@
  * API Client for connecting GUI to backend
  */
 
+interface RequestOptions {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+}
+
+interface APIResponse<T = any> {
+    data?: T;
+    error?: string;
+    message?: string;
+}
+
 class DTXAPIClient {
-    constructor(baseUrl = 'http://localhost:3001') {
+    private baseUrl: string;
+
+    constructor(baseUrl: string = 'http://localhost:3001') {
         this.baseUrl = baseUrl;
     }
 
-    async request(endpoint, options = {}) {
+    async request<T = any>(endpoint: string, options: RequestOptions = {}): Promise<T> {
         const url = `${this.baseUrl}${endpoint}`;
         const config = {
             headers: {
@@ -32,65 +46,65 @@ class DTXAPIClient {
     }
 
     // Chart operations
-    async getCharts(params = {}) {
+    async getCharts(params: Record<string, any> = {}): Promise<any> {
         const queryString = new URLSearchParams(params).toString();
         const endpoint = `/api/charts${queryString ? `?${queryString}` : ''}`;
         return this.request(endpoint);
     }
 
-    async getChart(id) {
+    async getChart(id: string): Promise<any> {
         return this.request(`/api/charts/${id}`);
     }
 
-    async createChart(chart) {
+    async createChart(chart: any): Promise<any> {
         return this.request('/api/charts', {
             method: 'POST',
             body: JSON.stringify(chart)
         });
     }
 
-    async deleteChart(id) {
+    async deleteChart(id: string): Promise<any> {
         return this.request(`/api/charts/${id}`, {
             method: 'DELETE'
         });
     }
 
-    async getStats() {
+    async getStats(): Promise<any> {
         return this.request('/api/charts/stats');
     }
 
     // Scraping operations
-    async startScraping(scrapeRequest) {
+    async startScraping(scrapeRequest: any): Promise<any> {
         return this.request('/api/scrape', {
             method: 'POST',
             body: JSON.stringify(scrapeRequest)
         });
     }
 
-    async getSources() {
+    async getSources(): Promise<any> {
         return this.request('/api/scrape/sources');
     }
 
     // Download operations
-    async startDownload(downloadRequest) {
+    async startDownload(downloadRequest: any): Promise<any> {
         return this.request('/api/downloads', {
             method: 'POST',
             body: JSON.stringify(downloadRequest)
         });
     }
 
-    async getDownloadStatus(downloadId) {
+    async getDownloadStatus(downloadId: string): Promise<any> {
         return this.request(`/api/downloads/${downloadId}`);
     }
 
-    async cancelDownload(downloadId) {
+    async cancelDownload(downloadId: string): Promise<any> {
         return this.request(`/api/downloads/${downloadId}`, {
             method: 'DELETE'
         });
     }
 
     // Health check
-    async checkHealth() {
+    async checkHealth(): Promise<any> {
         return this.request('/api/health');
     }
 }

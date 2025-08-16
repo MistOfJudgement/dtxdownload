@@ -2,18 +2,20 @@
   "name": "dtxdownload",
   "version": "1.0.0",
   "description": "Download tool for DTXMania charts",
-  "main": "dist/index.js",
+  "main": "dist/electron/main.js",
   "bin": {
     "dtx-download": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
+    "build:gui": "cd gui && npm run build",
+    "build:electron": "tsc && tsc --project electron/tsconfig.json",
+    "build:all": "npm run build && npm run build:gui && npm run build:electron",
     "dev": "tsc --watch",
     "start": "npm run electron",
     "server": "npm run build && node dist/api/server.js",
     "server:dev": "tsc && concurrently \"tsc --watch\" \"nodemon dist/api/server.js\"",
-    "electron": "npm run build:electron && electron .",
-    "build:electron": "tsc && tsc --project electron/tsconfig.json",
+    "electron": "npm run build:all && electron .",
     "test": "jest",
     "test:unit": "jest --testPathPattern=src",
     "test:e2e": "jest --testPathPattern=tests/e2e",

@@ -13,9 +13,6 @@ export interface DownloadOptions {
   /** Directory to save downloads */
   downloadDir: string;
   
-  /** Whether to create subdirectories by source */
-  organizeBySource?: boolean;
-  
   /** Whether to overwrite existing files */
   overwrite?: boolean;
   
@@ -540,8 +537,13 @@ export class ChartDownloader {
           if (stderr) console.log(`   stderr: ${stderr.trim()}`);
           
           if (code === 0) {
-            // Unzip successful, now organize the files
-            this.organizeExtractedFiles(tempExtractDir, zipDir, chart, options);
+            // Unzip successful, now organize the files if requested
+            if (options.organizeSongFolders) {
+              this.organizeExtractedFiles(tempExtractDir, zipDir, chart, options);
+            } else {
+              // Just move files directly to target directory without extra organization
+              this.moveFilesDirectly(tempExtractDir, zipDir);
+            }
             
             // Clean up temp directory
             try {
@@ -595,6 +597,44 @@ export class ChartDownloader {
       console.log(`🗑️  Cleaned up ZIP file: ${path.basename(zipPath)}`);
     } catch (error) {
       console.log(`⚠️  Could not delete ZIP file: ${zipPath}`);
+    }
+  }
+
+  /**
+   * Move files directly from temp directory to target directory without extra organization
+   */
+  private moveFilesDirectly(tempDir: string, targetDir: string): void {
+    try {
+      const files = fs.readdirSync(tempDir);
+      
+      // Ensure target directory exists
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      
+      // Move each file/folder directly to target directory
+      for (const file of files) {
+        const sourcePath = path.join(tempDir, file);
+        const targetPath = path.join(targetDir, file);
+        
+        // If target already exists, try to find a unique name
+        let finalTargetPath = targetPath;
+        let counter = 1;
+        while (fs.existsSync(finalTargetPath)) {
+          const parsedPath = path.parse(targetPath);
+          finalTargetPath = path.join(parsedPath.dir, `${parsedPath.name}_${counter}${parsedPath.ext}`);
+          counter++;
+        }
+        
+        fs.renameSync(sourcePath, finalTargetPath);
+        console.log(`📁 Moved: ${file} → ${path.basename(finalTargetPath)}`);
+      }
+      
+      console.log(`✅ Files moved directly to: ${path.basename(targetDir)}`);
+      
+    } catch (error) {
+      console.log(`⚠️  Could not move files directly: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
     }
   }
 
@@ -950,11 +990,6 @@ export class ChartDownloader {
     }
     
     let dir = options.downloadDir;
-    
-    // Organize by source if requested
-    if (options.organizeBySource) {
-      dir = path.join(dir, chart.source);
-    }
     
     return path.join(dir, filename);
   }

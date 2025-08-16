@@ -252,7 +252,6 @@ export class DTXApiServer {
         const operation = await this.downloadService.downloadChartsById(chartIds, {
           downloadDir,
           maxConcurrency: parseInt(maxConcurrency),
-          organizeBySource: true,
           overwrite: false
         });
         

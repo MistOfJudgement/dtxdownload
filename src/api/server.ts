@@ -32,6 +32,10 @@ interface DownloadRequest {
   destination?: string;
   concurrency?: number;
   skipExisting?: boolean;
+  options?: {
+    organizeIntoFolders?: boolean;
+    deleteZipAfterExtraction?: boolean;
+  };
 }
 
 interface ScrapeRequest {
@@ -350,7 +354,8 @@ export class DTXApiServer {
           {
             downloadDir: downloadRequest.destination || './downloads',
             maxConcurrency: downloadRequest.concurrency || 3,
-            overwrite: !downloadRequest.skipExisting
+            overwrite: !downloadRequest.skipExisting,
+            organizeSongFolders: downloadRequest.options?.organizeIntoFolders ?? false
           }
         );
         

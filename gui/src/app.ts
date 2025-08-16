@@ -185,6 +185,7 @@ export class DTXDownloadManager {
         this.updateStats();
         this.updateDownloadButton();
         this.updateSelectAllCheckbox();
+        this.updateSelectedSongsList();
         this.renderCharts(); // Re-render to update selection visual state
     }
 
@@ -447,6 +448,53 @@ export class DTXDownloadManager {
         }
     }
 
+    private updateSelectedSongsList(): void {
+        const selectedChartIds = this.selectionManager.getSelectedArray();
+        const selectedSongsList = DOMUtils.getRequiredElement('selectedSongsList');
+        const selectedSongsCount = DOMUtils.getRequiredElement('selectedSongsCount');
+        
+        // Update count
+        selectedSongsCount.textContent = selectedChartIds.length.toString();
+        
+        // Clear previous content
+        selectedSongsList.innerHTML = '';
+        
+        if (selectedChartIds.length === 0) {
+            selectedSongsList.innerHTML = '<div class="no-selection-message">No songs selected</div>';
+            return;
+        }
+        
+        // Get full chart objects from chart manager
+        const selectedCharts = this.chartManager.getChartsByIds(selectedChartIds);
+        
+        // Create list of selected songs
+        selectedCharts.forEach((chart: Chart) => {
+            const songItem = document.createElement('div');
+            songItem.className = 'selected-song-item';
+            
+            songItem.innerHTML = `
+                <div class="selected-song-info">
+                    <div class="selected-song-title">${chart.title}</div>
+                    <div class="selected-song-artist">${chart.artist}</div>
+                </div>
+                <button class="selected-song-remove" title="Remove from selection" data-chart-id="${chart.id}">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            // Add remove button functionality
+            const removeBtn = songItem.querySelector('.selected-song-remove') as HTMLButtonElement;
+            removeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.selectionManager.toggle(chart.id);
+                // Selection change event will trigger updateSelectedSongsList automatically
+            });
+            
+            selectedSongsList.appendChild(songItem);
+        });
+    }
+
     private renderPagination(): void {
         const totalItems = this.chartManager.getFilteredCharts().length;
         const { totalPages, hasNext, hasPrev } = this.uiStateManager.getPaginationInfo(totalItems);
@@ -688,9 +736,54 @@ export class DTXDownloadManager {
         }
     }
 
-    private startDownload(): void {
-        // Placeholder for download functionality
-        console.log('Download started for:', this.selectionManager.getSelectedArray());
+    private async startDownload(): Promise<void> {
+        try {
+            const selectedCharts = this.selectionManager.getSelectedArray();
+            
+            if (selectedCharts.length === 0) {
+                this.updateStatus('No charts selected for download');
+                return;
+            }
+
+            // Get download directory from UI
+            const downloadDirElement = DOMUtils.getElementById('downloadDir') as HTMLInputElement;
+            const downloadDir = downloadDirElement?.value || './downloads';
+
+            // Get download options
+            const organizeIntoFolders = (DOMUtils.getElementById('organizeFolders') as HTMLInputElement)?.checked ?? true;
+            const deleteZipAfterExtraction = (DOMUtils.getElementById('deleteZip') as HTMLInputElement)?.checked ?? true;
+
+            this.updateStatus(`Starting download of ${selectedCharts.length} chart(s)...`);
+
+            // Create download request
+            const downloadRequest = {
+                chartIds: selectedCharts,
+                destination: downloadDir,
+                concurrency: 3,
+                skipExisting: false,
+                options: {
+                    organizeIntoFolders,
+                    deleteZipAfterExtraction
+                }
+            };
+
+            // Start download via API
+            const response = await this.apiClient.startDownload(downloadRequest);
+            
+            if (response.downloadId) {
+                this.updateStatus(`Download started! Download ID: ${response.downloadId}`);
+                console.log('Download started successfully:', response);
+                
+                // Optional: Clear selection after starting download
+                this.selectionManager.clear();
+            } else {
+                throw new Error('No download ID received from server');
+            }
+
+        } catch (error) {
+            console.error('Download failed:', error);
+            this.updateStatus(`Download failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     /**

@@ -9,10 +9,10 @@ import * as fs from 'fs';
 
 export interface DownloadServiceOptions {
   downloadDir: string;
-  organizeBySource?: boolean;
   maxConcurrency?: number;
   overwrite?: boolean;
   timeout?: number;
+  organizeSongFolders?: boolean;
 }
 
 export interface DownloadStats {
@@ -136,7 +136,7 @@ export class DownloadService {
 
     const downloadOptions: DownloadOptions = {
       downloadDir: options.downloadDir,
-      organizeBySource: options.organizeBySource || true,
+      organizeSongFolders: options.organizeSongFolders || false,
       overwrite: options.overwrite || false,
       maxConcurrency: options.maxConcurrency || 3,
       timeout: options.timeout || 30000,

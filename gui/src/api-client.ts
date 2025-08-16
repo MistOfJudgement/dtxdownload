@@ -14,7 +14,7 @@ interface APIResponse<T = any> {
     message?: string;
 }
 
-class DTXAPIClient {
+export class DTXAPIClient {
     private baseUrl: string;
 
     constructor(baseUrl: string = 'http://localhost:3001') {

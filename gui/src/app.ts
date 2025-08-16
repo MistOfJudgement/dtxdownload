@@ -91,6 +91,19 @@ export class DTXDownloadManager {
         DOMUtils.addEventListener('prevPageBtn', 'click', () => this.previousPage());
         DOMUtils.addEventListener('nextPageBtn', 'click', () => this.nextPage());
         
+        // Scrape modal
+        DOMUtils.addEventListener('closeScrapeModal', 'click', () => this.hideScrapeModal());
+        DOMUtils.addEventListener('cancelScrapeBtn', 'click', () => this.hideScrapeModal());
+        DOMUtils.addEventListener('startScrapeModalBtn', 'click', () => this.startScraping());
+        
+        // Close modal when clicking outside
+        DOMUtils.addEventListener('scrapeModal', 'click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.id === 'scrapeModal') {
+                this.hideScrapeModal();
+            }
+        });
+        
         // Internal event listeners
         eventBus.on('charts-updated', (charts: Chart[]) => this.onChartsUpdated(charts));
         eventBus.on('selection-changed', (selection: Set<string>) => this.onSelectionChanged(selection));
@@ -487,10 +500,66 @@ export class DTXDownloadManager {
     }
 
     /**
-     * Placeholder methods for complex functionality
+     * Modal and complex functionality
      */
     private showScrapeModal(): void {
         DOMUtils.toggleElement('scrapeModal', true);
+    }
+
+    private hideScrapeModal(): void {
+        DOMUtils.toggleElement('scrapeModal', false);
+    }
+
+    private async startScraping(): Promise<void> {
+        const source = DOMUtils.getValue('scrapeSource');
+        const maxPages = parseInt(DOMUtils.getValue('maxPages')) || 1;
+        const incremental = (DOMUtils.getRequiredElement<HTMLInputElement>('incrementalScrape')).checked;
+        
+        this.hideScrapeModal();
+        this.updateStatus('Scraping charts...');
+        this.uiStateManager.setLoading(true);
+        
+        try {
+            if (this.isOnline) {
+                // Use backend API for scraping
+                const scrapeRequest = {
+                    source,
+                    maxPages,
+                    incremental
+                };
+                
+                const response = await this.apiClient.startScraping(scrapeRequest);
+                
+                // After scraping, reload charts from the database
+                if (response.chartsFound !== undefined) {
+                    // Reload charts from database to show updated results
+                    const chartsResponse = await this.apiClient.getCharts();
+                    if (chartsResponse.charts && chartsResponse.charts.length > 0) {
+                        this.chartManager.setCharts(chartsResponse.charts);
+                    }
+                    
+                    // Update status based on scraping results
+                    if (response.chartsAdded > 0) {
+                        this.updateStatus(`Successfully scraped ${response.chartsAdded} new charts (${response.chartsFound} total found, ${response.chartsDuplicated} duplicates)`);
+                    } else if (response.chartsFound > 0) {
+                        this.updateStatus(`Scraping complete: Found ${response.chartsFound} charts, but all were already in database`);
+                    } else {
+                        this.updateStatus('No charts found during scraping');
+                    }
+                } else if (response.message) {
+                    this.updateStatus(response.message);
+                } else {
+                    this.updateStatus('Scraping completed');
+                }
+            } else {
+                this.updateStatus('Cannot scrape charts: No backend connection');
+            }
+        } catch (error) {
+            console.error('Scraping failed:', error);
+            this.updateStatus('Scraping failed: ' + (error as Error).message);
+        } finally {
+            this.uiStateManager.setLoading(false);
+        }
     }
 
     private importDatabase(): void {
@@ -498,11 +567,24 @@ export class DTXDownloadManager {
         input.click();
     }
 
-    private clearAllData(): void {
+    private async clearAllData(): Promise<void> {
         if (confirm('Are you sure you want to clear all chart data? This cannot be undone.')) {
-            this.chartManager.clearCharts();
-            this.selectionManager.clear();
-            this.updateStatus('All data cleared');
+            try {
+                // Clear frontend data
+                this.chartManager.clearCharts();
+                this.selectionManager.clear();
+                
+                // Clear backend database if online
+                if (this.isOnline) {
+                    const response = await this.apiClient.clearAllCharts();
+                    this.updateStatus(`Cleared ${response.deletedCount} charts from database`);
+                } else {
+                    this.updateStatus('All local data cleared (offline mode)');
+                }
+            } catch (error) {
+                console.error('Error clearing data:', error);
+                this.updateStatus('Error clearing data: ' + (error as Error).message);
+            }
         }
     }
 

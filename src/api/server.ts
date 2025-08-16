@@ -69,7 +69,7 @@ export class DTXApiServer {
     this.app.use(express.json({ limit: '50mb' }));
     
     // Serve static files from gui directory
-    this.app.use('/gui', express.static(path.join(__dirname, '../../gui')));
+    this.app.use('/gui', express.static(path.join(__dirname, '../../gui/dist')));
     
     // Request logging
     this.app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -209,6 +209,20 @@ export class DTXApiServer {
       } catch (error) {
         console.error('Error deleting chart:', error);
         res.status(500).json({ error: 'Failed to delete chart' });
+      }
+    });
+    
+    // DELETE /api/charts - Clear all charts
+    this.app.delete('/api/charts', async (_req: Request, res: Response) => {
+      try {
+        const deletedCount = await this.database.clearAllCharts();
+        res.json({ 
+          message: `Cleared ${deletedCount} charts from database`,
+          deletedCount 
+        });
+      } catch (error) {
+        console.error('Error clearing all charts:', error);
+        res.status(500).json({ error: 'Failed to clear all charts' });
       }
     });
     

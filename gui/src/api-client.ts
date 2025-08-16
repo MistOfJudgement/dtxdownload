@@ -69,6 +69,12 @@ export class DTXAPIClient {
         });
     }
 
+    async clearAllCharts(): Promise<any> {
+        return this.request('/api/charts', {
+            method: 'DELETE'
+        });
+    }
+
     async getStats(): Promise<any> {
         return this.request('/api/charts/stats');
     }

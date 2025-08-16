@@ -240,6 +240,15 @@ export class ChartDatabase {
   }
 
   /**
+   * Clear all charts from the database
+   */
+  async clearAllCharts(): Promise<number> {
+    const stmt = this.db.prepare('DELETE FROM charts');
+    const result = stmt.run();
+    return result.changes;
+  }
+
+  /**
    * Close database connection
    */
   close(): void {

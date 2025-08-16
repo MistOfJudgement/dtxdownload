@@ -40,3 +40,4 @@ tests/e2e/**/*.db
 google-chrome-stable.deb
 *.zip
 *.tar.gz
+.playwright-mcp/

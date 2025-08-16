@@ -508,6 +508,43 @@ export class DTXDownloadManager {
 
     private hideScrapeModal(): void {
         DOMUtils.toggleElement('scrapeModal', false);
+        this.resetScrapeProgress();
+    }
+
+    private showScrapeProgress(): void {
+        DOMUtils.toggleElement('scrapeProgress', true);
+        DOMUtils.setDisabled('startScrapeModalBtn', true);
+        DOMUtils.setDisabled('cancelScrapeBtn', true);
+        DOMUtils.setTextContent('startScrapeModalBtn', 'Scraping...');
+    }
+
+    private hideScrapeProgress(): void {
+        DOMUtils.toggleElement('scrapeProgress', false);
+        DOMUtils.setDisabled('startScrapeModalBtn', false);
+        DOMUtils.setDisabled('cancelScrapeBtn', false);
+        DOMUtils.setInnerHTML('startScrapeModalBtn', '<i class="fas fa-spider"></i> Start Scraping');
+    }
+
+    private resetScrapeProgress(): void {
+        this.hideScrapeProgress();
+        DOMUtils.setTextContent('scrapeProgressLabel', 'Preparing to scrape...');
+        DOMUtils.setTextContent('scrapeProgressValue', '0/0');
+        DOMUtils.setTextContent('scrapeProgressDetails', 'Starting scrape process...');
+        const progressFill = DOMUtils.getRequiredElement('scrapeProgressFill');
+        progressFill.style.width = '0%';
+    }
+
+    private updateScrapeProgress(current: number, total: number, status: string, details?: string): void {
+        const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+        
+        DOMUtils.setTextContent('scrapeProgressLabel', status);
+        DOMUtils.setTextContent('scrapeProgressValue', `${current}/${total}`);
+        if (details) {
+            DOMUtils.setTextContent('scrapeProgressDetails', details);
+        }
+        
+        const progressFill = DOMUtils.getRequiredElement('scrapeProgressFill');
+        progressFill.style.width = `${percentage}%`;
     }
 
     private async startScraping(): Promise<void> {
@@ -515,13 +552,15 @@ export class DTXDownloadManager {
         const maxPages = parseInt(DOMUtils.getValue('maxPages')) || 1;
         const incremental = (DOMUtils.getRequiredElement<HTMLInputElement>('incrementalScrape')).checked;
         
-        this.hideScrapeModal();
-        this.updateStatus('Scraping charts...');
-        this.uiStateManager.setLoading(true);
+        // Show progress UI
+        this.showScrapeProgress();
+        this.updateScrapeProgress(0, maxPages + 2, 'Starting scrape...', 'Initializing scraping process...');
         
         try {
             if (this.isOnline) {
-                // Use backend API for scraping
+                // Simulate progress updates during scraping
+                this.simulateScrapeProgress(maxPages);
+                
                 const scrapeRequest = {
                     source,
                     maxPages,
@@ -529,6 +568,9 @@ export class DTXDownloadManager {
                 };
                 
                 const response = await this.apiClient.startScraping(scrapeRequest);
+                
+                // Complete progress
+                this.updateScrapeProgress(maxPages + 2, maxPages + 2, 'Scraping complete!', 'Processing results...');
                 
                 // After scraping, reload charts from the database
                 if (response.chartsFound !== undefined) {
@@ -541,24 +583,78 @@ export class DTXDownloadManager {
                     // Update status based on scraping results
                     if (response.chartsAdded > 0) {
                         this.updateStatus(`Successfully scraped ${response.chartsAdded} new charts (${response.chartsFound} total found, ${response.chartsDuplicated} duplicates)`);
+                        this.updateScrapeProgress(maxPages + 2, maxPages + 2, 'Success!', `Found ${response.chartsAdded} new charts`);
                     } else if (response.chartsFound > 0) {
                         this.updateStatus(`Scraping complete: Found ${response.chartsFound} charts, but all were already in database`);
+                        this.updateScrapeProgress(maxPages + 2, maxPages + 2, 'Complete!', `All ${response.chartsFound} charts already in database`);
                     } else {
                         this.updateStatus('No charts found during scraping');
+                        this.updateScrapeProgress(maxPages + 2, maxPages + 2, 'Complete!', 'No new charts found');
                     }
                 } else if (response.message) {
                     this.updateStatus(response.message);
+                    this.updateScrapeProgress(maxPages + 2, maxPages + 2, 'Complete!', response.message);
                 } else {
                     this.updateStatus('Scraping completed');
+                    this.updateScrapeProgress(maxPages + 2, maxPages + 2, 'Complete!', 'Scraping process finished');
                 }
+                
+                // Hide modal after a short delay
+                setTimeout(() => {
+                    this.hideScrapeModal();
+                }, 2000);
+                
             } else {
                 this.updateStatus('Cannot scrape charts: No backend connection');
+                this.updateScrapeProgress(0, maxPages + 2, 'Error!', 'No backend connection');
+                setTimeout(() => {
+                    this.hideScrapeModal();
+                }, 2000);
             }
         } catch (error) {
             console.error('Scraping failed:', error);
             this.updateStatus('Scraping failed: ' + (error as Error).message);
-        } finally {
-            this.uiStateManager.setLoading(false);
+            this.updateScrapeProgress(0, maxPages + 2, 'Failed!', (error as Error).message);
+            setTimeout(() => {
+                this.hideScrapeModal();
+            }, 3000);
+        }
+    }
+
+    private async simulateScrapeProgress(maxPages: number): Promise<void> {
+        // Simulate more realistic progress updates during scraping
+        const steps = [
+            { progress: 0.1, message: 'Connecting to source...' },
+            { progress: 0.2, message: 'Analyzing page structure...' },
+        ];
+        
+        // Add page scraping steps
+        for (let i = 1; i <= maxPages; i++) {
+            steps.push({
+                progress: 0.2 + (i / maxPages) * 0.7,
+                message: `Scraping page ${i} of ${maxPages}...`
+            });
+        }
+        
+        steps.push(
+            { progress: 0.95, message: 'Processing results...' },
+            { progress: 1.0, message: 'Finalizing...' }
+        );
+        
+        for (const step of steps) {
+            // Variable delay based on step (scraping pages takes longer)
+            const delay = step.message.includes('Scraping page') ? 300 : 150;
+            await new Promise(resolve => setTimeout(resolve, delay));
+            
+            const currentStep = Math.floor(step.progress * (maxPages + 2));
+            const totalSteps = maxPages + 2;
+            
+            this.updateScrapeProgress(
+                currentStep, 
+                totalSteps, 
+                step.message, 
+                `Step ${currentStep} of ${totalSteps}`
+            );
         }
     }
 

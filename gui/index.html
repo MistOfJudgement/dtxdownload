@@ -263,6 +263,22 @@
                             Incremental (skip existing charts)
                         </label>
                     </div>
+                    
+                    <!-- Scraping Progress -->
+                    <div class="scrape-progress hidden" id="scrapeProgress">
+                        <div class="progress-item">
+                            <div class="progress-header">
+                                <span class="progress-label" id="scrapeProgressLabel">Preparing to scrape...</span>
+                                <span class="progress-value" id="scrapeProgressValue">0/0</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="scrapeProgressFill"></div>
+                            </div>
+                            <div class="progress-details" id="scrapeProgressDetails">
+                                <small>Starting scrape process...</small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" id="cancelScrapeBtn">Cancel</button>

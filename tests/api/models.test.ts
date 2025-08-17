@@ -4,7 +4,6 @@
 
 import {
   DownloadRequest,
-  LegacyDownloadRequest,
   DownloadResponse,
   ChartsListResponse,
   ScrapeRequest,
@@ -45,28 +44,6 @@ describe('API Models', () => {
       expect(request.autoUnzip).toBe(true);
       expect(request.deleteZipAfterExtraction).toBe(false);
       expect(request.overwrite).toBe(true);
-    });
-  });
-
-  describe('LegacyDownloadRequest', () => {
-    it('should match GUI format structure', () => {
-      const legacyRequest: LegacyDownloadRequest = {
-        chartIds: ['chart1', 'chart2'],
-        destination: './downloads/legacy',
-        concurrency: 3,
-        skipExisting: false,
-        options: {
-          organizeIntoFolders: true,
-          deleteZipAfterExtraction: true
-        }
-      };
-      
-      expect(legacyRequest.chartIds).toEqual(['chart1', 'chart2']);
-      expect(legacyRequest.destination).toBe('./downloads/legacy');
-      expect(legacyRequest.concurrency).toBe(3);
-      expect(legacyRequest.skipExisting).toBe(false);
-      expect(legacyRequest.options.organizeIntoFolders).toBe(true);
-      expect(legacyRequest.options.deleteZipAfterExtraction).toBe(true);
     });
   });
 

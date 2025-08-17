@@ -11,6 +11,7 @@ import { StorageService } from './services/StorageService.js';
 import { DOMUtils } from './utils/DOMUtils.js';
 import { eventBus } from './utils/EventBus.js';
 import { Chart } from './types/index.js';
+import { convertChartResponsesToCharts } from './utils/typeConversion.js';
 
 export class DTXDownloadManager {
     private chartManager: ChartManager;
@@ -142,7 +143,7 @@ export class DTXDownloadManager {
                 // Try to load from backend
                 const response = await this.apiClient.getCharts();
                 if (response.charts && response.charts.length > 0) {
-                    this.chartManager.setCharts(response.charts);
+                    this.chartManager.setCharts(convertChartResponsesToCharts(response.charts));
                 }
             }
             // Charts are automatically loaded from localStorage by ChartManager
@@ -629,7 +630,7 @@ export class DTXDownloadManager {
                     // Reload charts from database to show updated results
                     const chartsResponse = await this.apiClient.getCharts();
                     if (chartsResponse.charts && chartsResponse.charts.length > 0) {
-                        this.chartManager.setCharts(chartsResponse.charts);
+                        this.chartManager.setCharts(convertChartResponsesToCharts(chartsResponse.charts));
                     }
                     
                     // Update status based on scraping results

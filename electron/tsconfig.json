@@ -13,7 +13,7 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "../api/*": ["../dist/api/*"]
+      "../api/*": ["../dist/src/api/*"]
     }
   },
   "include": [

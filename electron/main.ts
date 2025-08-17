@@ -3,7 +3,7 @@ import * as path from 'path';
 import { Server } from 'http';
 
 // Import the existing server using require for CommonJS compatibility
-const { createApp } = require('../api/server');
+const { createApp } = require('../src/api/server');
 
 let mainWindow: BrowserWindow | null = null;
 let server: Server | null = null;

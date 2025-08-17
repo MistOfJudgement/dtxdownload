@@ -5,7 +5,10 @@
     "moduleResolution": "node",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -18,7 +21,8 @@
     "resolveJsonModule": true
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "../shared/**/*"
   ],
   "exclude": [
     "node_modules",

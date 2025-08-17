@@ -1,0 +1,15 @@
+{
+  "name": "@dtx/shared",
+  "version": "1.0.0",
+  "description": "Shared types and models for DTX Download Manager",
+  "main": "models.js",
+  "types": "models.d.ts",
+  "files": [
+    "models.ts",
+    "models.js",
+    "models.d.ts"
+  ],
+  "scripts": {
+    "build": "tsc models.ts --declaration --outDir ."
+  }
+}

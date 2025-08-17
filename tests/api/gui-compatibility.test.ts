@@ -3,44 +3,18 @@
  * Ensures the models work with the actual patterns used in the GUI
  */
 
-import { DownloadRequest, LegacyDownloadRequest } from '../../src/api/models';
+import { DownloadRequest } from '@shared/models';
 
 describe('GUI Compatibility Tests', () => {
   describe('GUI Download Request Creation', () => {
-    it('should match the request structure created by GUI app.ts', () => {
+    it('should match the unified request structure used by GUI app.ts', () => {
       // This mimics the request creation in gui/src/app.ts startDownload method
-      const selectedCharts = ['chart1', 'chart2'];
-      const downloadDir = './downloads/gui-test';
-      const organizeIntoFolders = true;
-      const deleteZipAfterExtraction = false;
-
-      // Legacy GUI format (current implementation)
-      const legacyDownloadRequest: LegacyDownloadRequest = {
-        chartIds: selectedCharts,
-        destination: downloadDir,
-        concurrency: 3,
-        skipExisting: false,
-        options: {
-          organizeIntoFolders,
-          deleteZipAfterExtraction
-        }
-      };
-
-      expect(legacyDownloadRequest.chartIds).toEqual(['chart1', 'chart2']);
-      expect(legacyDownloadRequest.destination).toBe('./downloads/gui-test');
-      expect(legacyDownloadRequest.concurrency).toBe(3);
-      expect(legacyDownloadRequest.options.organizeIntoFolders).toBe(true);
-      expect(legacyDownloadRequest.options.deleteZipAfterExtraction).toBe(false);
-    });
-
-    it('should support new GUI format when updated', () => {
-      // Future GUI format using new DownloadRequest interface
       const selectedCharts = ['chart1', 'chart2'];
       const downloadDir = './downloads/gui-test';
       const organizeSongFolders = true;
       const deleteZipAfterExtraction = false;
 
-      const newDownloadRequest: DownloadRequest = {
+      const downloadRequest: DownloadRequest = {
         chartIds: selectedCharts,
         downloadDir,
         maxConcurrency: 3,
@@ -49,12 +23,40 @@ describe('GUI Compatibility Tests', () => {
         overwrite: false
       };
 
-      expect(newDownloadRequest.chartIds).toEqual(['chart1', 'chart2']);
-      expect(newDownloadRequest.downloadDir).toBe('./downloads/gui-test');
-      expect(newDownloadRequest.maxConcurrency).toBe(3);
-      expect(newDownloadRequest.organizeSongFolders).toBe(true);
-      expect(newDownloadRequest.deleteZipAfterExtraction).toBe(false);
-      expect(newDownloadRequest.overwrite).toBe(false);
+      expect(downloadRequest.chartIds).toEqual(['chart1', 'chart2']);
+      expect(downloadRequest.downloadDir).toBe('./downloads/gui-test');
+      expect(downloadRequest.maxConcurrency).toBe(3);
+      expect(downloadRequest.organizeSongFolders).toBe(true);
+      expect(downloadRequest.deleteZipAfterExtraction).toBe(false);
+      expect(downloadRequest.overwrite).toBe(false);
+    });
+
+    it('should support all available options in the unified format', () => {
+      // Test with all available options
+      const selectedCharts = ['chart1', 'chart2'];
+      const downloadDir = './downloads/gui-test';
+      const organizeSongFolders = true;
+      const deleteZipAfterExtraction = false;
+      const autoUnzip = true;
+      const overwrite = false;
+
+      const downloadRequest: DownloadRequest = {
+        chartIds: selectedCharts,
+        downloadDir,
+        maxConcurrency: 3,
+        organizeSongFolders,
+        autoUnzip,
+        deleteZipAfterExtraction,
+        overwrite
+      };
+
+      expect(downloadRequest.chartIds).toEqual(['chart1', 'chart2']);
+      expect(downloadRequest.downloadDir).toBe('./downloads/gui-test');
+      expect(downloadRequest.maxConcurrency).toBe(3);
+      expect(downloadRequest.organizeSongFolders).toBe(true);
+      expect(downloadRequest.autoUnzip).toBe(true);
+      expect(downloadRequest.deleteZipAfterExtraction).toBe(false);
+      expect(downloadRequest.overwrite).toBe(false);
     });
   });
 
@@ -68,24 +70,7 @@ describe('GUI Compatibility Tests', () => {
         overwriteExisting: false
       };
 
-      // Legacy format mapping
-      const legacyRequest: LegacyDownloadRequest = {
-        chartIds: ['chart1'],
-        destination: './downloads',
-        concurrency: 3,
-        skipExisting: !guiCheckboxStates.overwriteExisting, // inverted logic
-        options: {
-          organizeIntoFolders: guiCheckboxStates.organizeFolders,
-          deleteZipAfterExtraction: guiCheckboxStates.deleteZip
-        }
-      };
-
-      expect(legacyRequest.skipExisting).toBe(true); // !false = true
-      expect(legacyRequest.options.organizeIntoFolders).toBe(true);
-      expect(legacyRequest.options.deleteZipAfterExtraction).toBe(false);
-
-      // New format mapping
-      const newRequest: DownloadRequest = {
+      const request: DownloadRequest = {
         chartIds: ['chart1'],
         downloadDir: './downloads',
         maxConcurrency: 3,
@@ -95,10 +80,10 @@ describe('GUI Compatibility Tests', () => {
         overwrite: guiCheckboxStates.overwriteExisting
       };
 
-      expect(newRequest.organizeSongFolders).toBe(true);
-      expect(newRequest.autoUnzip).toBe(true);
-      expect(newRequest.deleteZipAfterExtraction).toBe(false);
-      expect(newRequest.overwrite).toBe(false);
+      expect(request.organizeSongFolders).toBe(true);
+      expect(request.autoUnzip).toBe(true);
+      expect(request.deleteZipAfterExtraction).toBe(false);
+      expect(request.overwrite).toBe(false);
     });
   });
 
@@ -116,29 +101,15 @@ describe('GUI Compatibility Tests', () => {
         return Promise.resolve({ downloadId: 'test-123' });
       };
 
-      // Test with legacy format
-      const legacyRequest: LegacyDownloadRequest = {
-        chartIds: ['chart1'],
-        destination: './downloads',
-        concurrency: 3,
-        skipExisting: false,
-        options: {
-          organizeIntoFolders: true,
-          deleteZipAfterExtraction: true
-        }
-      };
-
-      expect(() => mockStartDownload(legacyRequest)).not.toThrow();
-
-      // Test with new format
-      const newRequest: DownloadRequest = {
+      // Test with unified format
+      const request: DownloadRequest = {
         chartIds: ['chart1'],
         downloadDir: './downloads',
         maxConcurrency: 3,
         organizeSongFolders: true
       };
 
-      expect(() => mockStartDownload(newRequest)).not.toThrow();
+      expect(() => mockStartDownload(request)).not.toThrow();
     });
   });
 
@@ -152,84 +123,101 @@ describe('GUI Compatibility Tests', () => {
 
       const savedPath = mockStorageService.loadDownloadDirectory();
       
-      // Should work with both request formats
-      const legacyRequest: LegacyDownloadRequest = {
-        chartIds: ['chart1'],
-        destination: savedPath,
-        concurrency: 3,
-        skipExisting: false,
-        options: {
-          organizeIntoFolders: true,
-          deleteZipAfterExtraction: true
-        }
-      };
-
-      const newRequest: DownloadRequest = {
+      const request: DownloadRequest = {
         chartIds: ['chart1'],
         downloadDir: savedPath,
         maxConcurrency: 3
       };
 
-      expect(legacyRequest.destination).toBe('./downloads/saved');
-      expect(newRequest.downloadDir).toBe('./downloads/saved');
+      expect(request.downloadDir).toBe('./downloads/saved');
     });
   });
 
   describe('Form Validation Compatibility', () => {
     it('should support GUI form validation patterns', () => {
       // Test validation logic that would be used in GUI
-      const validateDownloadRequest = (request: DownloadRequest | LegacyDownloadRequest): string[] => {
+      const validateDownloadRequest = (request: DownloadRequest): string[] => {
         const errors: string[] = [];
 
-        // Common validation
+        // Basic validation
         if (!request.chartIds || request.chartIds.length === 0) {
           errors.push('No charts selected');
         }
 
-        // Format-specific validation
-        if ('destination' in request) {
-          // Legacy format
-          if (!request.destination) {
-            errors.push('Download directory is required');
-          }
-          if (request.concurrency < 1) {
-            errors.push('Concurrency must be at least 1');
-          }
-        } else {
-          // New format
-          const newReq = request as DownloadRequest;
-          if (newReq.maxConcurrency && newReq.maxConcurrency < 1) {
-            errors.push('Max concurrency must be at least 1');
-          }
+        if (request.maxConcurrency !== undefined && request.maxConcurrency <= 0) {
+          errors.push('Max concurrency must be at least 1');
         }
 
         return errors;
       };
 
-      // Valid legacy request
-      const validLegacy: LegacyDownloadRequest = {
-        chartIds: ['chart1'],
-        destination: './downloads',
-        concurrency: 3,
-        skipExisting: false,
-        options: { organizeIntoFolders: true, deleteZipAfterExtraction: true }
-      };
-      expect(validateDownloadRequest(validLegacy)).toEqual([]);
-
-      // Valid new request
-      const validNew: DownloadRequest = {
+      // Valid request
+      const validRequest: DownloadRequest = {
         chartIds: ['chart1'],
         downloadDir: './downloads',
         maxConcurrency: 3
       };
-      expect(validateDownloadRequest(validNew)).toEqual([]);
+      expect(validateDownloadRequest(validRequest)).toEqual([]);
 
       // Invalid request (no charts)
-      const invalid: DownloadRequest = {
+      const invalidRequest: DownloadRequest = {
         chartIds: [],
         downloadDir: './downloads'
       };
-      expect(validateDownloadRequest(invalid)).toContain('No charts selected');
+      expect(validateDownloadRequest(invalidRequest)).toContain('No charts selected');
+
+      // Invalid request (bad concurrency)
+      const badConcurrencyRequest: DownloadRequest = {
+        chartIds: ['chart1'],
+        downloadDir: './downloads',
+        maxConcurrency: 0
+      };
+      expect(validateDownloadRequest(badConcurrencyRequest)).toContain('Max concurrency must be at least 1');
+    });
+  });
+
+  describe('Optional Properties Support', () => {
+    it('should work with minimal required properties', () => {
+      // Test that only required properties are needed
+      const minimalRequest: DownloadRequest = {
+        chartIds: ['chart1', 'chart2']
+      };
+
+      expect(minimalRequest.chartIds).toEqual(['chart1', 'chart2']);
+      expect(minimalRequest.downloadDir).toBeUndefined();
+      expect(minimalRequest.maxConcurrency).toBeUndefined();
+      expect(minimalRequest.organizeSongFolders).toBeUndefined();
+    });
+
+    it('should support partial option sets', () => {
+      // Test different combinations of options
+      const partialRequest1: DownloadRequest = {
+        chartIds: ['chart1'],
+        downloadDir: './downloads'
+      };
+
+      const partialRequest2: DownloadRequest = {
+        chartIds: ['chart1'],
+        maxConcurrency: 5,
+        autoUnzip: true
+      };
+
+      const partialRequest3: DownloadRequest = {
+        chartIds: ['chart1'],
+        organizeSongFolders: true,
+        deleteZipAfterExtraction: true,
+        overwrite: true
+      };
+
+      expect(partialRequest1.chartIds).toEqual(['chart1']);
+      expect(partialRequest1.downloadDir).toBe('./downloads');
+      
+      expect(partialRequest2.maxConcurrency).toBe(5);
+      expect(partialRequest2.autoUnzip).toBe(true);
+      
+      expect(partialRequest3.organizeSongFolders).toBe(true);
+      expect(partialRequest3.deleteZipAfterExtraction).toBe(true);
+      expect(partialRequest3.overwrite).toBe(true);
     });
   });
 });

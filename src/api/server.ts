@@ -10,39 +10,11 @@ import { ScrapingService, ApprovedDtxStrategy, Source } from '../scraping';
 import { DownloadService } from '../core/download/download-service';
 import { IChart } from '../core/models';
 import { ChartDatabase } from '../core/database/database';
-
-// Types for API requests/responses
-interface ChartSearchRequest {
-  query?: string;
-  artist?: string;
-  titleContains?: string;
-  minDifficulty?: number;
-  maxDifficulty?: number;
-  minBpm?: number;
-  maxBpm?: number;
-  sources?: string[];
-  limit?: number;
-  offset?: number;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
-
-interface DownloadRequest {
-  chartIds: string[];
-  destination?: string;
-  concurrency?: number;
-  skipExisting?: boolean;
-  options?: {
-    organizeIntoFolders?: boolean;
-    deleteZipAfterExtraction?: boolean;
-  };
-}
-
-interface ScrapeRequest {
-  source: string;
-  maxPages?: number;
-  incremental?: boolean;
-}
+import {
+  ChartQuery,
+  DownloadRequest,
+  ScrapeRequest
+} from '@shared/models';
 
 export class DTXApiServer {
   public app: express.Application;
@@ -127,7 +99,7 @@ export class DTXApiServer {
     // GET /api/charts - Search and list charts
     this.app.get('/api/charts', async (req: Request, res: Response) => {
       try {
-        const searchParams: ChartSearchRequest = req.query as any;
+        const searchParams: ChartQuery = req.query as any;
         const charts = await this.searchCharts(searchParams);
         
         res.json({
@@ -285,9 +257,9 @@ export class DTXApiServer {
         const scrapeRequest: ScrapeRequest = req.body;
         
         const source: Source = {
-          name: scrapeRequest.source,
-          baseUrl: this.getSourceBaseUrl(scrapeRequest.source),
-          strategy: scrapeRequest.source,
+          name: scrapeRequest.sourceName || 'approved-dtx',
+          baseUrl: this.getSourceBaseUrl(scrapeRequest.sourceName || 'approved-dtx'),
+          strategy: scrapeRequest.sourceName || 'approved-dtx',
           enabled: true,
           maxPages: scrapeRequest.maxPages || 1,
           rateLimit: 2000,
@@ -348,14 +320,14 @@ export class DTXApiServer {
           return res.status(400).json({ error: 'No valid charts found' });
         }
 
-        // Start download process with proper method
+        // Start download process
         const downloadResult = await this.downloadService.downloadChartsById(
           downloadRequest.chartIds,
           {
-            downloadDir: downloadRequest.destination || './downloads',
-            maxConcurrency: downloadRequest.concurrency || 3,
-            overwrite: !downloadRequest.skipExisting,
-            organizeSongFolders: downloadRequest.options?.organizeIntoFolders ?? false
+            downloadDir: downloadRequest.downloadDir || './downloads',
+            maxConcurrency: downloadRequest.maxConcurrency || 3,
+            overwrite: downloadRequest.overwrite ?? true,
+            organizeSongFolders: downloadRequest.organizeSongFolders ?? false
           }
         );
         
@@ -409,7 +381,7 @@ export class DTXApiServer {
     });
   }
   
-  private async searchCharts(params: ChartSearchRequest): Promise<IChart[]> {
+  private async searchCharts(params: ChartQuery): Promise<IChart[]> {
     let charts = await this.database.queryCharts();
     
     // Apply search filters

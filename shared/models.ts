@@ -21,13 +21,20 @@ export interface ScrapeRequest {
 }
 
 export interface ChartQuery {
+  query?: string; // General search query
   source?: string;
   artist?: string;
   title?: string;
+  titleContains?: string; // For partial title matches
   minBpm?: number;
   maxBpm?: number;
+  minDifficulty?: number;
+  maxDifficulty?: number;
+  sources?: string[]; // Multiple sources filter
   limit?: number;
   offset?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 // Response Models

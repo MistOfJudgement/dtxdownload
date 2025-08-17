@@ -2,65 +2,93 @@
  * Database service for managing DTX charts
  */
 
-import Database from 'better-sqlite3';
+import * as sqlite3 from 'sqlite3';
 import { IChart, ChartQueryOptions } from '../models';
 import { ChartValidationError } from '../errors';
 
 export class ChartDatabase {
-  private db: Database.Database;
+  private db: sqlite3.Database;
+  private initialized: Promise<void>;
 
   constructor(dbPath: string = 'charts.db') {
-    this.db = new Database(dbPath);
-    this.initializeDatabase();
+    this.db = new sqlite3.Database(dbPath);
+    this.initialized = this.initializeDatabase();
   }
 
   /**
    * Initialize the database schema
    */
-  private initializeDatabase(): void {
-    // Create charts table
-    const createChartsTable = this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS charts (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        artist TEXT NOT NULL,
-        bpm TEXT NOT NULL,
-        difficulties TEXT, -- JSON string of difficulty array
-        downloadUrl TEXT NOT NULL,
-        source TEXT NOT NULL,
-        tags TEXT, -- JSON string of tags array
-        previewImageUrl TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+  private async initializeDatabase(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Create charts table
+      const createChartsTable = `
+        CREATE TABLE IF NOT EXISTS charts (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          artist TEXT NOT NULL,
+          bpm TEXT NOT NULL,
+          difficulties TEXT, -- JSON string of difficulty array
+          downloadUrl TEXT NOT NULL,
+          source TEXT NOT NULL,
+          tags TEXT, -- JSON string of tags array
+          previewImageUrl TEXT,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
 
-    // Create indexes for better query performance
-    const createIndexes = [
-      'CREATE INDEX IF NOT EXISTS idx_charts_source ON charts(source)',
-      'CREATE INDEX IF NOT EXISTS idx_charts_artist ON charts(artist)',
-      'CREATE INDEX IF NOT EXISTS idx_charts_title ON charts(title)',
-      'CREATE INDEX IF NOT EXISTS idx_charts_bpm ON charts(bpm)'
-    ];
+      // Create indexes for better query performance
+      const createIndexes = [
+        'CREATE INDEX IF NOT EXISTS idx_charts_source ON charts(source)',
+        'CREATE INDEX IF NOT EXISTS idx_charts_artist ON charts(artist)',
+        'CREATE INDEX IF NOT EXISTS idx_charts_title ON charts(title)',
+        'CREATE INDEX IF NOT EXISTS idx_charts_bpm ON charts(bpm)'
+      ];
 
-    createChartsTable.run();
-    createIndexes.forEach(sql => this.db.prepare(sql).run());
+      this.db.serialize(() => {
+        this.db.run(createChartsTable, (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+        });
 
-    console.log('✅ Database initialized');
+        createIndexes.forEach(sql => {
+          this.db.run(sql, (err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+          });
+        });
+
+        console.log('✅ Database initialized');
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Ensure database is initialized before operations
+   */
+  private async ensureInitialized(): Promise<void> {
+    await this.initialized;
   }
 
   /**
    * Insert a new chart or update existing one
    */
   async saveChart(chart: IChart): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO charts (
-        id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `);
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR REPLACE INTO charts (
+          id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `;
 
-    try {
-      stmt.run(
+      const params = [
         chart.id,
         chart.title,
         chart.artist,
@@ -71,29 +99,47 @@ export class ChartDatabase {
         JSON.stringify(chart.tags || []),
         chart.previewImageUrl || null,
         chart.createdAt ? chart.createdAt.toISOString() : new Date().toISOString()
-      );
-    } catch (error) {
-      throw new ChartValidationError(`Failed to save chart: ${error instanceof Error ? error.message : String(error)}`);
-    }
+      ];
+
+      this.db.run(sql, params, function(err) {
+        if (err) {
+          reject(new ChartValidationError(`Failed to save chart: ${err.message}`));
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 
   /**
    * Save multiple charts in a transaction
    */
   async saveCharts(charts: IChart[]): Promise<{ saved: number; errors: string[] }> {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO charts (
-        id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `);
+    await this.ensureInitialized();
+    
+    return new Promise((resolve) => {
+      const sql = `
+        INSERT OR REPLACE INTO charts (
+          id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `;
 
-    const transaction = this.db.transaction((charts: IChart[]) => {
       const errors: string[] = [];
       let saved = 0;
+      let completed = 0;
 
-      for (const chart of charts) {
-        try {
-          stmt.run(
+      if (charts.length === 0) {
+        resolve({ saved: 0, errors: [] });
+        return;
+      }
+
+      const db = this.db; // Capture reference for callbacks
+
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        for (const chart of charts) {
+          const params = [
             chart.id,
             chart.title,
             chart.artist,
@@ -104,155 +150,250 @@ export class ChartDatabase {
             JSON.stringify(chart.tags || []),
             chart.previewImageUrl || null,
             chart.createdAt ? chart.createdAt.toISOString() : new Date().toISOString()
-          );
-          saved++;
-        } catch (error) {
-          errors.push(`Chart ${chart.id}: ${error instanceof Error ? error.message : String(error)}`);
+          ];
+
+          db.run(sql, params, function(err) {
+            completed++;
+            if (err) {
+              errors.push(`Chart ${chart.id}: ${err.message}`);
+            } else {
+              saved++;
+            }
+
+            if (completed === charts.length) {
+              if (errors.length > 0) {
+                db.run('ROLLBACK', () => {
+                  resolve({ saved: 0, errors });
+                });
+              } else {
+                db.run('COMMIT', () => {
+                  resolve({ saved, errors });
+                });
+              }
+            }
+          });
         }
-      }
-
-      return { saved, errors };
+      });
     });
-
-    return transaction(charts);
   }
 
   /**
    * Get a chart by ID
    */
   async getChart(id: string): Promise<IChart | null> {
-    const stmt = this.db.prepare('SELECT * FROM charts WHERE id = ?');
-    const row = stmt.get(id) as any;
-
-    if (!row) {
-      return null;
-    }
-
-    return this.mapRowToChart(row);
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT * FROM charts WHERE id = ?';
+      
+      this.db.get(sql, [id], (err, row: any) => {
+        if (err) {
+          reject(err);
+        } else if (!row) {
+          resolve(null);
+        } else {
+          resolve(this.mapRowToChart(row));
+        }
+      });
+    });
   }
 
   /**
    * Query charts with filters
    */
   async queryCharts(options: ChartQueryOptions = {}): Promise<IChart[]> {
-    let sql = 'SELECT * FROM charts WHERE 1=1';
-    const params: any[] = [];
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      let sql = 'SELECT * FROM charts WHERE 1=1';
+      const params: any[] = [];
 
-    // Apply filters
-    if (options.source) {
-      sql += ' AND source = ?';
-      params.push(options.source);
-    }
-
-    if (options.artist) {
-      sql += ' AND artist LIKE ?';
-      params.push(`%${options.artist}%`);
-    }
-
-    if (options.title) {
-      sql += ' AND title LIKE ?';
-      params.push(`%${options.title}%`);
-    }
-
-    if (options.minBpm) {
-      sql += ' AND CAST(bpm AS INTEGER) >= ?';
-      params.push(options.minBpm);
-    }
-
-    if (options.maxBpm) {
-      sql += ' AND CAST(bpm AS INTEGER) <= ?';
-      params.push(options.maxBpm);
-    }
-
-    // Sorting
-    if (options.sortBy) {
-      const sortOrder = options.sortOrder || 'ASC';
-      sql += ` ORDER BY ${options.sortBy} ${sortOrder}`;
-    } else {
-      sql += ' ORDER BY createdAt DESC';
-    }
-
-    // Pagination
-    if (options.limit) {
-      sql += ' LIMIT ?';
-      params.push(options.limit);
-
-      if (options.offset) {
-        sql += ' OFFSET ?';
-        params.push(options.offset);
+      // Apply filters
+      if (options.source) {
+        sql += ' AND source = ?';
+        params.push(options.source);
       }
-    }
 
-    const stmt = this.db.prepare(sql);
-    const rows = stmt.all(...params) as any[];
+      if (options.artist) {
+        sql += ' AND artist LIKE ?';
+        params.push(`%${options.artist}%`);
+      }
 
-    return rows.map(row => this.mapRowToChart(row));
+      if (options.title) {
+        sql += ' AND title LIKE ?';
+        params.push(`%${options.title}%`);
+      }
+
+      if (options.minBpm) {
+        sql += ' AND CAST(bpm AS INTEGER) >= ?';
+        params.push(options.minBpm);
+      }
+
+      if (options.maxBpm) {
+        sql += ' AND CAST(bpm AS INTEGER) <= ?';
+        params.push(options.maxBpm);
+      }
+
+      // Sorting
+      if (options.sortBy) {
+        const sortOrder = options.sortOrder || 'ASC';
+        sql += ` ORDER BY ${options.sortBy} ${sortOrder}`;
+      } else {
+        sql += ' ORDER BY createdAt DESC';
+      }
+
+      // Pagination
+      if (options.limit) {
+        sql += ' LIMIT ?';
+        params.push(options.limit);
+
+        if (options.offset) {
+          sql += ' OFFSET ?';
+          params.push(options.offset);
+        }
+      }
+
+      this.db.all(sql, params, (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows.map(row => this.mapRowToChart(row)));
+        }
+      });
+    });
   }
 
   /**
    * Get chart count by source
    */
   async getChartCountBySource(): Promise<Record<string, number>> {
-    const stmt = this.db.prepare('SELECT source, COUNT(*) as count FROM charts GROUP BY source');
-    const rows = stmt.all() as any[];
-
-    const result: Record<string, number> = {};
-    for (const row of rows) {
-      result[row.source] = row.count;
-    }
-
-    return result;
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT source, COUNT(*) as count FROM charts GROUP BY source';
+      
+      this.db.all(sql, [], (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const result: Record<string, number> = {};
+          for (const row of rows) {
+            result[row.source] = row.count;
+          }
+          resolve(result);
+        }
+      });
+    });
   }
 
   /**
    * Get total chart count
    */
   async getTotalChartCount(): Promise<number> {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM charts');
-    const result = stmt.get() as any;
-    return result.count;
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT COUNT(*) as count FROM charts';
+      
+      this.db.get(sql, [], (err, result: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result.count);
+        }
+      });
+    });
   }
 
   /**
    * Check if chart exists
    */
   async chartExists(id: string): Promise<boolean> {
-    const stmt = this.db.prepare('SELECT 1 FROM charts WHERE id = ?');
-    return !!stmt.get(id);
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT 1 FROM charts WHERE id = ?';
+      
+      this.db.get(sql, [id], (err, result: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(!!result);
+        }
+      });
+    });
   }
 
   /**
    * Delete a chart
    */
   async deleteChart(id: string): Promise<boolean> {
-    const stmt = this.db.prepare('DELETE FROM charts WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'DELETE FROM charts WHERE id = ?';
+      
+      this.db.run(sql, [id], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(this.changes > 0);
+        }
+      });
+    });
   }
 
   /**
    * Clear all charts from a specific source
    */
   async clearChartsFromSource(source: string): Promise<number> {
-    const stmt = this.db.prepare('DELETE FROM charts WHERE source = ?');
-    const result = stmt.run(source);
-    return result.changes;
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'DELETE FROM charts WHERE source = ?';
+      
+      this.db.run(sql, [source], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(this.changes);
+        }
+      });
+    });
   }
 
   /**
    * Clear all charts from the database
    */
   async clearAllCharts(): Promise<number> {
-    const stmt = this.db.prepare('DELETE FROM charts');
-    const result = stmt.run();
-    return result.changes;
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'DELETE FROM charts';
+      
+      this.db.run(sql, [], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(this.changes);
+        }
+      });
+    });
   }
 
   /**
    * Close database connection
    */
-  close(): void {
-    this.db.close();
+  close(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.close((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 
   /**

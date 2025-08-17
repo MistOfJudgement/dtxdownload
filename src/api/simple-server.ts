@@ -12,10 +12,9 @@ import { DownloadService } from '../core/download/download-service';
 import { Source } from '../scraping/interfaces';
 import { 
   DownloadRequest, 
-  LegacyDownloadRequest, 
   DownloadResponse, 
   ChartsListResponse
-} from './models';
+} from '@shared/models';
 
 // Simple API server that can be extended
 export class DTXApiServer {
@@ -249,34 +248,7 @@ export class DTXApiServer {
     // Download endpoints
     this.app.post('/api/downloads', async (req: Request, res: Response) => {
       try {
-        // Handle both new DownloadRequest format and legacy GUI format
-        const requestBody = req.body;
-        let downloadOptions: DownloadRequest;
-
-        // Check if it's the legacy GUI format
-        if (requestBody.destination && requestBody.options) {
-          // Convert legacy format to new format
-          const legacyRequest = requestBody as LegacyDownloadRequest;
-          downloadOptions = {
-            chartIds: legacyRequest.chartIds,
-            downloadDir: legacyRequest.destination,
-            maxConcurrency: legacyRequest.concurrency || 3,
-            organizeSongFolders: legacyRequest.options.organizeIntoFolders,
-            deleteZipAfterExtraction: legacyRequest.options.deleteZipAfterExtraction,
-            overwrite: !legacyRequest.skipExisting
-          };
-        } else {
-          // Use new format directly
-          downloadOptions = {
-            chartIds: requestBody.chartIds,
-            downloadDir: requestBody.downloadDir || './downloads',
-            maxConcurrency: requestBody.maxConcurrency || 3,
-            organizeSongFolders: requestBody.organizeSongFolders,
-            autoUnzip: requestBody.autoUnzip,
-            deleteZipAfterExtraction: requestBody.deleteZipAfterExtraction,
-            overwrite: requestBody.overwrite || false
-          };
-        }
+        const downloadOptions: DownloadRequest = req.body;
         
         if (!downloadOptions.chartIds || !Array.isArray(downloadOptions.chartIds) || downloadOptions.chartIds.length === 0) {
           res.status(400).json({ error: 'chartIds array is required' });

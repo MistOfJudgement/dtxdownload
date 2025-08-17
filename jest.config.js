@@ -7,6 +7,11 @@ module.exports = {
     '**/?(*.)+(spec|test).ts',
     '**/tests/**/*.e2e.test.ts'
   ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/',
+    '.*/__tests__/test-data/.*'
+  ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },

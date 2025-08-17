@@ -114,12 +114,10 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
       
       const downloadOptions: DownloadOptions = {
         downloadDir: testDownloadDir,
-        autoUnzip: true,
-        deleteZipAfterExtraction: true, // Clean up faster
-        organizeSongFolders: true,
         overwrite: true,
         maxConcurrency: 1, // Less concurrent for stability
-        timeout: 15000 // Reduced from 30s to 15s for faster failures
+        timeout: 15000, // Reduced from 30s to 15s for faster failures
+        chartIds: sampleCharts.map(chart => chart.id)
       };
       
       if (sampleCharts.length > 0) {
@@ -234,10 +232,11 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
         
         const downloadOptions: DownloadOptions = {
           downloadDir: testDownloadDir,
-          autoUnzip: true,
-          organizeSongFolders: true,
-          deleteZipAfterExtraction: true, // Clean up for speed
           timeout: 10000 // Reduced from 20s to 10s for faster failures
+          ,
+          chartIds: [],
+          maxConcurrency: 0,
+          overwrite: false
         };
         
         const downloadResult = await downloader.downloadChart(testChart, downloadOptions);
@@ -304,9 +303,11 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
       
       const downloadOptions: DownloadOptions = {
         downloadDir: testDownloadDir,
-        autoUnzip: false, // Skip unzip for speed
         maxConcurrency: 1,
         timeout: 8000 // Reduced from 15s to 8s for faster failures
+        ,
+        chartIds: [],
+        overwrite: false
       };
       
       const results = await downloader.downloadCharts(testCharts, downloadOptions);

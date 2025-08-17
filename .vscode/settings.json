@@ -1,0 +1,11 @@
+{
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
+  "typescript.preferences.importModuleSpecifier": "shortest",
+  "files.associations": {
+    "*.test.ts": "typescript",
+    "*.e2e.test.ts": "typescript"
+  },
+  "typescript.validate.enable": true,
+  "typescript.format.enable": true
+}

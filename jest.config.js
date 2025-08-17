@@ -12,8 +12,11 @@ module.exports = {
     '/dist/',
     '.*/__tests__/test-data/.*'
   ],
+  // Transform TypeScript files
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: './tsconfig.test.json'
+    }],
   },
   collectCoverageFrom: [
     'src/**/*.ts',
@@ -29,13 +32,4 @@ module.exports = {
   forceExit: true,
   // Detect open handles
   detectOpenHandles: false, // Disable to prevent noise in CI
-  // Global settings for all tests
-  globals: {
-    'ts-jest': {
-      tsconfig: {
-        // Enable strict mode for better testing
-        strict: true
-      }
-    }
-  },
 };

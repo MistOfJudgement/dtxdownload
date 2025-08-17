@@ -12,6 +12,7 @@ import { DOMUtils } from './utils/DOMUtils.js';
 import { eventBus } from './utils/EventBus.js';
 import { Chart } from './types/index.js';
 import { convertChartResponsesToCharts } from './utils/typeConversion.js';
+import { DownloadRequest } from '@shared/models.js';
 
 export class DTXDownloadManager {
     private chartManager: ChartManager;
@@ -751,21 +752,15 @@ export class DTXDownloadManager {
             const downloadDir = downloadDirElement?.value || './downloads';
 
             // Get download options
-            const organizeIntoFolders = (DOMUtils.getElementById('organizeFolders') as HTMLInputElement)?.checked ?? true;
-            const deleteZipAfterExtraction = (DOMUtils.getElementById('deleteZip') as HTMLInputElement)?.checked ?? true;
-
             this.updateStatus(`Starting download of ${selectedCharts.length} chart(s)...`);
 
             // Create download request
-            const downloadRequest = {
+            const downloadRequest: DownloadRequest= {
                 chartIds: selectedCharts,
-                destination: downloadDir,
-                concurrency: 3,
-                skipExisting: false,
-                options: {
-                    organizeIntoFolders,
-                    deleteZipAfterExtraction
-                }
+                downloadDir: downloadDir,
+                maxConcurrency: 3,
+                overwrite: false,
+                timeout: 10000 // 10 seconds per chart
             };
 
             // Start download via API

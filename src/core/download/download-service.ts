@@ -6,14 +6,7 @@ import { ChartDownloader, DownloadOptions, DownloadResult } from './downloader';
 import { ChartDatabase } from '../database/database';
 import { IChart, IDownloadProgress } from '../models';
 import * as fs from 'fs';
-
-export interface DownloadServiceOptions {
-  downloadDir: string;
-  maxConcurrency?: number;
-  overwrite?: boolean;
-  timeout?: number;
-  organizeSongFolders?: boolean;
-}
+import { DownloadRequest } from '@shared/models';
 
 export interface DownloadStats {
   total: number;
@@ -63,7 +56,7 @@ export class DownloadService {
       maxBpm?: number;
       limit?: number;
     },
-    options: DownloadServiceOptions
+    options: DownloadRequest
   ): Promise<DownloadResult[]> {
     
     console.log('🔍 Querying charts for download...');
@@ -84,7 +77,7 @@ export class DownloadService {
 
   async downloadChartsById(
     chartIds: string[],
-    options: DownloadServiceOptions
+    options: DownloadRequest
   ): Promise<DownloadOperation> {
     
     console.log('🔍 Loading charts by ID...');
@@ -112,7 +105,7 @@ export class DownloadService {
 
   private async downloadChartsWithId(
     charts: IChart[],
-    options: DownloadServiceOptions
+    options: DownloadRequest
   ): Promise<DownloadOperation> {
     
     const startTime = Date.now();
@@ -134,14 +127,6 @@ export class DownloadService {
       }
     };
 
-    const downloadOptions: DownloadOptions = {
-      downloadDir: options.downloadDir,
-      organizeSongFolders: options.organizeSongFolders || false,
-      overwrite: options.overwrite || false,
-      maxConcurrency: options.maxConcurrency || 3,
-      timeout: options.timeout || 30000,
-      onProgress
-    };
 
     if (!fs.existsSync(options.downloadDir)) {
       fs.mkdirSync(options.downloadDir, { recursive: true });
@@ -157,7 +142,7 @@ export class DownloadService {
 
     // Enhanced download options with completion tracking
     const enhancedDownloadOptions: DownloadOptions = {
-      ...downloadOptions,
+      ...options,
       onProgress: (progress: IDownloadProgress) => {
         onProgress(progress);
       },

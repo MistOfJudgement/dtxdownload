@@ -323,12 +323,7 @@ export class DTXApiServer {
         // Start download process
         const downloadResult = await this.downloadService.downloadChartsById(
           downloadRequest.chartIds,
-          {
-            downloadDir: downloadRequest.downloadDir || './downloads',
-            maxConcurrency: downloadRequest.maxConcurrency || 3,
-            overwrite: downloadRequest.overwrite ?? true,
-            organizeSongFolders: downloadRequest.organizeSongFolders ?? false
-          }
+          downloadRequest
         );
         
         return res.json({

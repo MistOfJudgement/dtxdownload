@@ -10,6 +10,8 @@ import { DownloadService } from './core/download/download-service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { DownloadRequest } from '@shared/models';
+import { DownloadOptions } from './core/download/downloader';
 
 // Type definitions for command options
 interface ScrapeOptions {
@@ -591,15 +593,12 @@ program
       if (options.limit) query.limit = Math.min(options.limit, 50);
       
       // Download options
-      const downloadOptions = {
+      const downloadOptions:DownloadRequest = {
         downloadDir: options.dir,
-        organizeBySource: options.organize !== false,
         overwrite: options.overwrite || false,
         maxConcurrency: options.concurrent,
         timeout: options.timeout,
-        autoUnzip: options.unzip !== false,
-        deleteZipAfterExtraction: options.keepZip !== true,
-        organizeSongFolders: options.songFolders !== false
+        chartIds: []
       };
       
       console.log('🎵 DTX Chart Downloader (Query Mode)');
@@ -700,17 +699,15 @@ program
         console.log('\n❓ Use --confirm flag to proceed with download');
         process.exit(0);
       }
-      
-      const downloadOptions = {
+
+      const downloadOptions: DownloadOptions = {
         downloadDir: options.dir,
-        organizeBySource: options.organize !== false,
         overwrite: options.overwrite || false,
         maxConcurrency: options.concurrent,
         timeout: options.timeout,
-        autoUnzip: options.unzip !== false,
-        deleteZipAfterExtraction: options.keepZip !== true,
-        organizeSongFolders: options.songFolders !== false
+        chartIds: validCharts
       };
+
       
       console.log('🎵 DTX Chart Downloader (ID Mode)');
       console.log(`📁 Download directory: ${downloadOptions.downloadDir}`);

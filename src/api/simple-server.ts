@@ -255,16 +255,7 @@ export class DTXApiServer {
           return;
         }
         
-        // Start download process
-        const serviceOptions = {
-          downloadDir: downloadOptions.downloadDir || './downloads',
-          maxConcurrency: downloadOptions.maxConcurrency || 3,
-          overwrite: downloadOptions.overwrite || false,
-          organizeSongFolders: downloadOptions.organizeSongFolders || false
-        };
-        
-        const operation = await this.downloadService.downloadChartsById(downloadOptions.chartIds, serviceOptions);
-        
+        const operation = await this.downloadService.downloadChartsById(downloadOptions.chartIds, downloadOptions);
         const successful = operation.results.filter(r => r.success).length;
         const failed = operation.results.filter(r => !r.success).length;
         

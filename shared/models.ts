@@ -6,12 +6,10 @@
 // Request Models
 export interface DownloadRequest {
   chartIds: string[];
-  downloadDir?: string;
-  maxConcurrency?: number;
-  organizeSongFolders?: boolean;
-  autoUnzip?: boolean;
-  deleteZipAfterExtraction?: boolean;
-  overwrite?: boolean;
+  downloadDir: string;
+  maxConcurrency: number;
+  overwrite: boolean;
+  timeout: number;
 }
 
 export interface ScrapeRequest {

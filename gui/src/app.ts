@@ -93,9 +93,8 @@ export class DTXDownloadManager {
         DOMUtils.addEventListener('selectDirBtn', 'click', () => this.selectDownloadDirectory());
         DOMUtils.addEventListener('directoryInput', 'change', (e) => this.handleDirectorySelection(e));
         
-        // Pagination
-        DOMUtils.addEventListener('prevPageBtn', 'click', () => this.previousPage());
-        DOMUtils.addEventListener('nextPageBtn', 'click', () => this.nextPage());
+        // Infinite scroll
+        this.setupInfiniteScroll();
         
         // Scrape modal
         DOMUtils.addEventListener('closeScrapeModal', 'click', () => this.hideScrapeModal());
@@ -153,6 +152,7 @@ export class DTXDownloadManager {
             this.updateStatus('Error loading data');
         } finally {
             this.uiStateManager.setLoading(false);
+            this.uiStateManager.resetInfiniteScroll(); // Initialize infinite scroll state
         }
     }
 
@@ -202,7 +202,7 @@ export class DTXDownloadManager {
      */
     private handleSearch(query: string): void {
         this.chartManager.setSearchQuery(query);
-        this.uiStateManager.resetPagination();
+        this.uiStateManager.resetInfiniteScroll();
         this.renderCharts();
     }
 
@@ -214,7 +214,7 @@ export class DTXDownloadManager {
         const diffMax = parseFloat(DOMUtils.getValue('diffMax')) || undefined;
 
         this.chartManager.applyFilters({ artist, bpmMin, bpmMax, diffMin, diffMax });
-        this.uiStateManager.resetPagination();
+        this.uiStateManager.resetInfiniteScroll();
         this.renderCharts();
     }
 
@@ -227,7 +227,7 @@ export class DTXDownloadManager {
         DOMUtils.setValue('diffMax', '');
         
         this.chartManager.clearFilters();
-        this.uiStateManager.resetPagination();
+        this.uiStateManager.resetInfiniteScroll();
         this.renderCharts();
     }
 
@@ -236,8 +236,8 @@ export class DTXDownloadManager {
     }
 
     private toggleSelectAll(checked: boolean): void {
-        const currentPageCharts = this.getCurrentPageCharts();
-        const chartIds = currentPageCharts.map(chart => chart.id);
+        const currentVisibleCharts = this.getCurrentVisibleCharts();
+        const chartIds = currentVisibleCharts.map(chart => chart.id);
         
         if (checked) {
             this.selectionManager.selectMultiple(chartIds);
@@ -250,31 +250,21 @@ export class DTXDownloadManager {
         this.selectionManager.clear();
     }
 
-    private nextPage(): void {
-        const totalItems = this.chartManager.getFilteredCharts().length;
-        const { totalPages } = this.uiStateManager.getPaginationInfo(totalItems);
-        this.uiStateManager.nextPage(totalPages);
-    }
-
-    private previousPage(): void {
-        this.uiStateManager.previousPage();
-    }
-
     /**
-     * Get current page charts
+     * Get current visible charts for infinite scroll
      */
-    private getCurrentPageCharts(): Chart[] {
+    private getCurrentVisibleCharts(): Chart[] {
         const filteredCharts = this.chartManager.getFilteredCharts();
         const state = this.uiStateManager.getState();
         this.chartManager.sortCharts(state.sortBy, state.sortOrder);
-        return this.uiStateManager.getPaginatedItems(filteredCharts);
+        return this.uiStateManager.getInfiniteScrollItems(filteredCharts);
     }
 
     /**
      * Render charts (simplified version)
      */
     private renderCharts(): void {
-        const charts = this.getCurrentPageCharts();
+        const charts = this.getCurrentVisibleCharts();
         const viewMode = this.uiStateManager.getViewMode();
         
         if (charts.length === 0) {
@@ -290,7 +280,8 @@ export class DTXDownloadManager {
             this.renderListView(charts);
         }
         
-        this.renderPagination();
+        // Hide pagination controls since we're using infinite scroll
+        DOMUtils.toggleElement('pagination', false);
     }
 
     /**
@@ -391,6 +382,61 @@ export class DTXDownloadManager {
     }
 
     /**
+     * Set up infinite scroll functionality
+     */
+    private setupInfiniteScroll(): void {
+        const chartsContainer = document.querySelector('.charts-container') as HTMLElement;
+        
+        if (!chartsContainer) {
+            console.warn('Charts container not found for infinite scroll setup');
+            return;
+        }
+        
+        let scrollTimeout: number | null = null;
+        
+        // Add scroll listener to the main charts container
+        const handleScroll = () => {
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            
+            scrollTimeout = window.setTimeout(() => {
+                // Check if we're near the bottom of the container
+                const { scrollTop, scrollHeight, clientHeight } = chartsContainer;
+                const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+                
+                console.log(`Scroll: ${scrollPercentage.toFixed(2)} (${scrollTop}/${scrollHeight})`);
+                
+                // Load more when we're 90% scrolled down
+                if (scrollPercentage > 0.9) {
+                    console.log('Loading more charts...');
+                    this.loadMoreCharts();
+                }
+            }, 100);
+        };
+        
+        chartsContainer.addEventListener('scroll', handleScroll);
+        console.log('Infinite scroll setup complete on charts-container');
+    }
+
+    /**
+     * Load more charts for infinite scroll
+     */
+    private loadMoreCharts(): void {
+        const filteredCharts = this.chartManager.getFilteredCharts();
+        const totalItems = filteredCharts.length;
+        const currentlyLoaded = this.uiStateManager.getLoadedItemsCount();
+        
+        console.log(`Load more: ${currentlyLoaded}/${totalItems}, hasMore: ${this.uiStateManager.hasMoreItems(totalItems)}, isLoading: ${this.uiStateManager.isLoading()}`);
+        
+        if (this.uiStateManager.hasMoreItems(totalItems) && !this.uiStateManager.isLoading()) {
+            console.log('Loading more items...');
+            this.uiStateManager.loadMoreItems();
+            this.renderCharts();
+        }
+    }
+
+    /**
      * UI Update methods
      */
     private updateStats(): void {
@@ -412,8 +458,8 @@ export class DTXDownloadManager {
     }
 
     private updateSelectAllCheckbox(): void {
-        const currentPageCharts = this.getCurrentPageCharts();
-        const chartIds = currentPageCharts.map(chart => chart.id);
+        const currentVisibleCharts = this.getCurrentVisibleCharts();
+        const chartIds = currentVisibleCharts.map(chart => chart.id);
         const state = this.selectionManager.getSelectionState(chartIds);
         
         const checkbox = DOMUtils.getRequiredElement<HTMLInputElement>('selectAll');
@@ -836,8 +882,8 @@ export class DTXDownloadManager {
             switch (event.key) {
                 case 'a':
                     event.preventDefault();
-                    const currentPageCharts = this.getCurrentPageCharts();
-                    this.selectionManager.selectMultiple(currentPageCharts.map(c => c.id));
+                    const currentVisibleCharts = this.getCurrentVisibleCharts();
+                    this.selectionManager.selectMultiple(currentVisibleCharts.map(c => c.id));
                     break;
                 case 'f':
                     event.preventDefault();

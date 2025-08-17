@@ -1,5 +1,5 @@
 /**
- * Manages UI state like pagination, view mode, loading states
+ * Manages UI state like infinite scroll, view mode, loading states
  */
 
 import { UIState, ViewMode, SortOrder } from '../types/index.js';
@@ -15,6 +15,55 @@ export class UIStateManager {
         searchQuery: '',
         isLoading: false
     };
+
+    // Infinite scroll state
+    private loadedItemsCount: number = 0;
+    private readonly itemsPerLoad: number = 20;
+
+    /**
+     * Get loaded items count for infinite scroll
+     */
+    getLoadedItemsCount(): number {
+        return this.loadedItemsCount;
+    }
+
+    /**
+     * Set loaded items count
+     */
+    setLoadedItemsCount(count: number): void {
+        this.loadedItemsCount = Math.max(0, count);
+        this.emitChange();
+    }
+
+    /**
+     * Load more items (infinite scroll)
+     */
+    loadMoreItems(): void {
+        this.loadedItemsCount += this.itemsPerLoad;
+        this.emitChange();
+    }
+
+    /**
+     * Reset infinite scroll state
+     */
+    resetInfiniteScroll(): void {
+        this.loadedItemsCount = this.itemsPerLoad; // Start with one page worth
+        this.emitChange();
+    }
+
+    /**
+     * Get items for infinite scroll (up to loaded count)
+     */
+    getInfiniteScrollItems<T>(items: T[]): T[] {
+        return items.slice(0, this.loadedItemsCount);
+    }
+
+    /**
+     * Check if there are more items to load
+     */
+    hasMoreItems(totalItems: number): boolean {
+        return this.loadedItemsCount < totalItems;
+    }
 
     /**
      * Get current UI state
@@ -139,7 +188,7 @@ export class UIStateManager {
      */
     setSearchQuery(query: string): void {
         this.state.searchQuery = query;
-        this.state.currentPage = 1; // Reset to first page when searching
+        this.resetInfiniteScroll(); // Reset to initial load when searching
         this.emitChange();
     }
 

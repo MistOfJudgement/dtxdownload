@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc && npm run copy-assets",
     "build:watch": "tsc --watch",
-    "copy-assets": "cp *.html *.css dist/",
+    "copy-assets": "shx cp *.html *.css dist/",
     "dev": "npm run build:watch",
     "serve": "python3 -m http.server 8080 --directory dist",
     "test": "jest",

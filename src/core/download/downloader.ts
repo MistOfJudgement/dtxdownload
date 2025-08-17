@@ -75,6 +75,22 @@ export class ChartDownloader {
           };
         }
       }
+
+      // Check if this is a OneDrive URL
+      if (this.isOneDriveUrl(chart.downloadUrl)) {
+        try {
+          const downloadResult = await this.downloadFromOneDrive(chart, options, startTime);
+          return downloadResult;
+        } catch (error) {
+          return {
+            chart,
+            success: false,
+            error: `OneDrive download failed: ${error instanceof Error ? error.message : String(error)}`,
+            fileSize: 0,
+            downloadTime: Date.now() - startTime
+          };
+        }
+      }
       
       // Check if file exists and we shouldn't overwrite
       if (fs.existsSync(filePath) && !options.overwrite) {
@@ -703,6 +719,9 @@ export class ChartDownloader {
           const redirectUrl = response.headers.location;
           if (redirectUrl) {
             console.log(`Following redirect: ${redirectUrl}`);
+            // Properly clean up the current request/response before following redirect
+            response.destroy();
+            request.destroy();
             this.downloadFile(redirectUrl, filePath, options, chart)
               .then(resolve)
               .catch(reject);
@@ -711,6 +730,9 @@ export class ChartDownloader {
         }
         
         if (response.statusCode !== 200) {
+          // Clean up resources before rejecting
+          response.destroy();
+          request.destroy();
           reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
           return;
         }
@@ -861,5 +883,69 @@ export class ChartDownloader {
    */
   cancelAllDownloads(): void {
     this.activeDownloads.clear();
+  }
+
+  /**
+   * Download from OneDrive with multiple fallback methods
+   */
+  private async downloadFromOneDrive(chart: IChart, options: DownloadOptions, startTime: number): Promise<DownloadResult> {
+    const filePath = this.getFilePath(chart, options);
+    
+    // Method 1: Try simple URL with &download=1 parameter
+    try {
+      const directUrl = `${chart.downloadUrl}&download=1`;
+      console.log(`🔗 Trying OneDrive direct download: ${directUrl}`);
+      
+      const fileSize = await this.downloadFile(directUrl, filePath, options, chart);
+      
+      return {
+        chart,
+        success: true,
+        filePath,
+        fileSize,
+        downloadTime: Date.now() - startTime
+      };
+    } catch (error) {
+      console.log(`⚠️ OneDrive direct download failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Method 2: Try following redirects to get actual download URL
+    try {
+      console.log(`🔄 Trying OneDrive redirect resolution...`);
+      const fileSize = await this.downloadFile(chart.downloadUrl, filePath, options, chart);
+      
+      return {
+        chart,
+        success: true,
+        filePath,
+        fileSize,
+        downloadTime: Date.now() - startTime
+      };
+    } catch (error) {
+      console.log(`⚠️ OneDrive redirect resolution failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Method 3: Return informative error about OneDrive limitations
+    return {
+      chart,
+      success: false,
+      error: 'OneDrive download failed: Modern OneDrive links require browser automation or authentication. Consider using direct download links or browser-based OneDrive downloader.',
+      fileSize: 0,
+      downloadTime: Date.now() - startTime
+    };
+  }
+
+  /**
+   * Check if URL is a OneDrive URL
+   */
+  private isOneDriveUrl(url: string): boolean {
+    const oneDrivePatterns = [
+      /1drv\.ms/i,
+      /onedrive\.live\.com/i,
+      /sharepoint\.com/i,
+      /my\.sharepoint\.com/i
+    ];
+    
+    return oneDrivePatterns.some(pattern => pattern.test(url));
   }
 }

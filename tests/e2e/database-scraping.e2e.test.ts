@@ -37,9 +37,23 @@ describe('E2E: Database Scraping', () => {
       // Ignore cleanup errors
     }
     
-    // Clean up test database
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+    // Clean up test database with retry for Windows file locking
+    const maxRetries = 3;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        if (fs.existsSync(testDbPath)) {
+          fs.unlinkSync(testDbPath);
+          break; // Success, exit the loop
+        }
+      } catch (error: any) {
+        if (i === maxRetries - 1) {
+          // Last attempt, log the error but don't fail the test
+          console.warn(`⚠️ Unable to delete test database: ${error.message}`);
+        } else {
+          // Wait a bit and retry
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
     }
   });
 

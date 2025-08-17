@@ -141,8 +141,8 @@ export class DTXDownloadManager {
         
         try {
             if (this.isOnline) {
-                // Try to load from backend
-                const response = await this.apiClient.getCharts();
+                // Try to load from backend - request all charts with high limit
+                const response = await this.apiClient.getCharts({ limit: 10000 });
                 if (response.charts && response.charts.length > 0) {
                     this.chartManager.setCharts(convertChartResponsesToCharts(response.charts));
                 }

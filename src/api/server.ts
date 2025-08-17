@@ -458,11 +458,14 @@ export class DTXApiServer {
       return 0;
     });
     
-    // Apply pagination
-    const offset = params.offset || 0;
-    const limit = params.limit || 100;
+    // Apply pagination only if limit is specified
+    if (params.limit !== undefined) {
+      const offset = params.offset || 0;
+      const limit = params.limit;
+      return charts.slice(offset, offset + limit);
+    }
     
-    return charts.slice(offset, offset + limit);
+    return charts;
   }
   
   private getSourceBaseUrl(sourceName: string): string {

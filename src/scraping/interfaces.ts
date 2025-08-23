@@ -65,5 +65,6 @@ export interface ScrapingOptions {
   requestDelay?: number;
   userAgent?: string;
   skipExisting?: boolean;
+  resumeFromOlder?: boolean;
   onProgress?: (progress: ScrapingProgress) => void;
 }

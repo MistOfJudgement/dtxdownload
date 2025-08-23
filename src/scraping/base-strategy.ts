@@ -7,6 +7,7 @@ import { IScrapingStrategy, Source, ScrapingOptions, ScrapingProgress, ScrapingS
 import { IChart } from '../core/models';
 import { HttpClient, HttpClientOptions } from './http-client';
 import { ScrapingError, ChartValidationError } from '../core/errors';
+import { ChartDatabase } from '../core/database';
 
 export abstract class BaseScrapingStrategy implements IScrapingStrategy {
   abstract readonly name: string;
@@ -14,9 +15,11 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
 
   protected readonly httpClient: HttpClient;
   protected scrapingProgress?: ScrapingProgress;
+  protected database: ChartDatabase | undefined;
 
-  constructor(httpOptions: HttpClientOptions = {}) {
+  constructor(httpOptions: HttpClientOptions = {}, database?: ChartDatabase) {
     this.httpClient = new HttpClient(httpOptions);
+    this.database = database;
   }
 
   abstract canHandle(url: string): boolean;
@@ -33,17 +36,54 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
       let currentUrl = source.baseUrl;
       let pageCount = 0;
       const maxPages = options.maxPages || source.maxPages || 50;
+      const resumeFromOlder = options.resumeFromOlder || false;
+      
+      // If resuming from older charts, find the last scraped page and continue from there
+      if (resumeFromOlder && this.database) {
+        const scrapedPages = await this.database.getScrapedPages(source.name);
+        if (scrapedPages.length > 0) {
+          console.log(`📋 Found ${scrapedPages.length} previously scraped pages for ${source.name}`);
+          // Skip to finding unscraped content by going to the end
+          currentUrl = await this.findOldestUnscrapedUrl(source, scrapedPages);
+        }
+      }
       
       while (currentUrl && pageCount < maxPages) {
         pageCount++;
         this.updateProgress(pageCount, maxPages, charts.length);
         
+        // Check if this page has already been scraped (skip if resuming and page exists)
+        if (this.database && options.skipExisting) {
+          const isScraped = await this.database.isPageScraped(source.name, currentUrl);
+          if (isScraped) {
+            console.log(`⏭️  Skipping already scraped page: ${currentUrl}`);
+            const nextUrl = await this.getNextPageUrl(currentUrl, ''); // Get next without scraping
+            if (!nextUrl) break;
+            currentUrl = nextUrl;
+            continue;
+          }
+        }
+        
         try {
+          console.log(`🔍 Scraping page ${pageCount}: ${currentUrl}`);
           const { pageCharts, html } = await this.scrapePageWithHtml(currentUrl, source);
           charts.push(...pageCharts);
           
+          // Record this page as scraped in the database
+          if (this.database) {
+            await this.database.recordPageScraped(
+              source.name, 
+              currentUrl, 
+              pageCount, 
+              pageCharts.length, 
+              'completed'
+            );
+            console.log(`📝 Recorded page ${pageCount} with ${pageCharts.length} charts`);
+          }
+          
           const nextUrl = await this.getNextPageUrl(currentUrl, html);
           if (!nextUrl) {
+            console.log(`🏁 No more pages found after page ${pageCount}`);
             break;
           }
           currentUrl = nextUrl;
@@ -55,9 +95,31 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
         } catch (error) {
           const errorMsg = `Error scraping page ${pageCount}: ${error instanceof Error ? error.message : String(error)}`;
           errors.push(errorMsg);
+          console.error(errorMsg);
+          
+          // Record failed page in database
+          if (this.database) {
+            await this.database.recordPageScraped(
+              source.name, 
+              currentUrl, 
+              pageCount, 
+              0, 
+              'failed',
+              errorMsg
+            );
+          }
           
           if (errors.length > 5) {
             throw new ScrapingError(`Too many errors during scraping: ${errors.join(', ')}`);
+          }
+          
+          // Continue to next page even if current page failed
+          try {
+            const nextUrl = await this.getNextPageUrl(currentUrl, '');
+            if (!nextUrl) break;
+            currentUrl = nextUrl;
+          } catch {
+            break; // If we can't get next URL, stop
           }
         }
       }
@@ -226,5 +288,15 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
 
   public getProgress(): ScrapingProgress | undefined {
     return this.scrapingProgress;
+  }
+
+  /**
+   * Find the oldest unscraped URL by working backwards from current pages
+   * Default implementation - can be overridden by specific strategies
+   */
+  protected async findOldestUnscrapedUrl(source: Source, _scrapedPages: Array<{ url: string; pageNumber: number | null }>): Promise<string> {
+    // Simple default: start from the base URL and let normal pagination handle finding older content
+    // ApprovedDTX strategy can override this to look for archive pages
+    return source.baseUrl;
   }
 }

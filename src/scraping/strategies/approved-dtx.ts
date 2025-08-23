@@ -6,6 +6,7 @@ import * as cheerio from 'cheerio';
 import { BaseScrapingStrategy } from '../base-strategy';
 import { IChart } from '../../core/models';
 import { ChartValidationError } from '../../core/errors';
+import { Source } from '../interfaces';
 
 export class ApprovedDtxStrategy extends BaseScrapingStrategy {
   readonly name = 'approved-dtx';
@@ -334,5 +335,40 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
     
     const batchKey = `${batchStart}-${batchEnd}`;
     return batchFolders[batchKey] || `https://drive.google.com/drive/folders/unknown-batch-${batchStart}-${batchEnd}`;
+  }
+
+  /**
+   * Override to find older unscraped content by looking at archive pages
+   */
+  protected override async findOldestUnscrapedUrl(source: Source, scrapedPages: Array<{ url: string; pageNumber: number | null }>): Promise<string> {
+    // ApprovedDTX uses archive pages for older content
+    // Look for year-based archives that haven't been scraped yet
+    const currentYear = new Date().getFullYear();
+    const scrapedUrls = new Set(scrapedPages.map(p => p.url));
+    
+    // Check archives starting from current year going backwards
+    for (let year = currentYear; year >= 2020; year--) {
+      const archiveUrl = `${this.baseUrl}${year}/`;
+      if (!scrapedUrls.has(archiveUrl)) {
+        console.log(`🗂️  Found unscraped archive for year ${year}: ${archiveUrl}`);
+        return archiveUrl;
+      }
+    }
+    
+    // If all archives are scraped, look for specific month archives
+    for (let year = currentYear; year >= 2020; year--) {
+      for (let month = 12; month >= 1; month--) {
+        const monthStr = month.toString().padStart(2, '0');
+        const monthArchiveUrl = `${this.baseUrl}${year}/${monthStr}/`;
+        if (!scrapedUrls.has(monthArchiveUrl)) {
+          console.log(`🗂️  Found unscraped month archive: ${monthArchiveUrl}`);
+          return monthArchiveUrl;
+        }
+      }
+    }
+    
+    // Fallback to base URL
+    console.log(`🔄 All archives appear scraped, starting from base URL`);
+    return source.baseUrl;
   }
 }

@@ -267,7 +267,12 @@ export class DTXApiServer {
         };
         
         // Start scraping process
-        const result = await this.scrapingService.scrapeSource(source);
+        const options = {
+          maxPages: scrapeRequest.maxPages || 1,
+          skipExisting: scrapeRequest.incremental || false,
+          resumeFromOlder: scrapeRequest.resumeFromOlder || false
+        };
+        const result = await this.scrapingService.scrapeSource(source, options);
         
         res.json({
           sourceName: source.name,
@@ -298,6 +303,42 @@ export class DTXApiServer {
           strategy: 'approved-dtx'
         }
       ]);
+    });
+
+    // GET /api/scrape/progress/:sourceName - Get scraping progress for a source
+    this.app.get('/api/scrape/progress/:sourceName', async (req, res) => {
+      try {
+        const sourceName = req.params.sourceName;
+        const stats = await this.database.getScrapingStats(sourceName);
+        const scrapedPages = await this.database.getScrapedPages(sourceName);
+        
+        res.json({
+          sourceName,
+          stats,
+          recentPages: scrapedPages.slice(0, 10) // Only return recent 10 pages
+        });
+      } catch (error) {
+        res.status(500).json({ 
+          error: 'Failed to get scraping progress: ' + (error instanceof Error ? error.message : String(error))
+        });
+      }
+    });
+
+    // DELETE /api/scrape/progress/:sourceName - Clear scraping progress for a source
+    this.app.delete('/api/scrape/progress/:sourceName', async (req, res) => {
+      try {
+        const sourceName = req.params.sourceName;
+        const deletedCount = await this.database.clearScrapingProgress(sourceName);
+        
+        res.json({
+          message: `Cleared scraping progress for ${sourceName}`,
+          deletedPages: deletedCount
+        });
+      } catch (error) {
+        res.status(500).json({ 
+          error: 'Failed to clear scraping progress: ' + (error instanceof Error ? error.message : String(error))
+        });
+      }
     });
   }
   

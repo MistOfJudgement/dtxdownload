@@ -16,6 +16,8 @@ export interface ScrapeRequest {
   sourceName?: string;
   maxPages?: number;
   requestDelay?: number;
+  incremental?: boolean;
+  resumeFromOlder?: boolean;
 }
 
 export interface ChartQuery {

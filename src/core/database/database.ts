@@ -37,16 +37,40 @@ export class ChartDatabase {
         )
       `;
 
+      // Create scraping progress table
+      const createScrapingProgressTable = `
+        CREATE TABLE IF NOT EXISTS scraping_progress (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source TEXT NOT NULL,
+          url TEXT NOT NULL,
+          page_number INTEGER,
+          scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          charts_found INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'completed', -- 'completed', 'failed', 'partial'
+          error_message TEXT,
+          UNIQUE(source, url)
+        )
+      `;
+
       // Create indexes for better query performance
       const createIndexes = [
         'CREATE INDEX IF NOT EXISTS idx_charts_source ON charts(source)',
         'CREATE INDEX IF NOT EXISTS idx_charts_artist ON charts(artist)',
         'CREATE INDEX IF NOT EXISTS idx_charts_title ON charts(title)',
-        'CREATE INDEX IF NOT EXISTS idx_charts_bpm ON charts(bpm)'
+        'CREATE INDEX IF NOT EXISTS idx_charts_bpm ON charts(bpm)',
+        'CREATE INDEX IF NOT EXISTS idx_scraping_progress_source ON scraping_progress(source)',
+        'CREATE INDEX IF NOT EXISTS idx_scraping_progress_scraped_at ON scraping_progress(scraped_at)'
       ];
 
       this.db.serialize(() => {
         this.db.run(createChartsTable, (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+        });
+
+        this.db.run(createScrapingProgressTable, (err) => {
           if (err) {
             reject(err);
             return;
@@ -372,6 +396,128 @@ export class ChartDatabase {
       const sql = 'DELETE FROM charts';
       
       this.db.run(sql, [], function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(this.changes);
+        }
+      });
+    });
+  }
+
+  /**
+   * Record that a page has been scraped
+   */
+  async recordPageScraped(source: string, url: string, pageNumber: number | null, chartsFound: number, status: 'completed' | 'failed' | 'partial' = 'completed', errorMessage?: string): Promise<void> {
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = `
+        INSERT OR REPLACE INTO scraping_progress (
+          source, url, page_number, charts_found, status, error_message, scraped_at
+        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `;
+
+      const params = [source, url, pageNumber, chartsFound, status, errorMessage || null];
+
+      this.db.run(sql, params, function(err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Check if a page has been scraped
+   */
+  async isPageScraped(source: string, url: string): Promise<boolean> {
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT 1 FROM scraping_progress WHERE source = ? AND url = ? AND status = "completed"';
+      
+      this.db.get(sql, [source, url], (err, result: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(!!result);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get all scraped pages for a source
+   */
+  async getScrapedPages(source: string): Promise<Array<{ url: string; pageNumber: number | null; scrapedAt: Date; chartsFound: number; status: string }>> {
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT url, page_number, scraped_at, charts_found, status FROM scraping_progress WHERE source = ? ORDER BY scraped_at DESC';
+      
+      this.db.all(sql, [source], (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows.map(row => ({
+            url: row.url,
+            pageNumber: row.page_number,
+            scrapedAt: new Date(row.scraped_at),
+            chartsFound: row.charts_found,
+            status: row.status
+          })));
+        }
+      });
+    });
+  }
+
+  /**
+   * Get scraping statistics for a source
+   */
+  async getScrapingStats(source: string): Promise<{ totalPages: number; completedPages: number; failedPages: number; totalCharts: number; lastScrapedAt: Date | null }> {
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = `
+        SELECT 
+          COUNT(*) as total_pages,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_pages,
+          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_pages,
+          SUM(charts_found) as total_charts,
+          MAX(scraped_at) as last_scraped_at
+        FROM scraping_progress 
+        WHERE source = ?
+      `;
+      
+      this.db.get(sql, [source], (err, result: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({
+            totalPages: result.total_pages || 0,
+            completedPages: result.completed_pages || 0,
+            failedPages: result.failed_pages || 0,
+            totalCharts: result.total_charts || 0,
+            lastScrapedAt: result.last_scraped_at ? new Date(result.last_scraped_at) : null
+          });
+        }
+      });
+    });
+  }
+
+  /**
+   * Clear scraping progress for a source
+   */
+  async clearScrapingProgress(source: string): Promise<number> {
+    await this.ensureInitialized();
+    
+    return new Promise((resolve, reject) => {
+      const sql = 'DELETE FROM scraping_progress WHERE source = ?';
+      
+      this.db.run(sql, [source], function(err) {
         if (err) {
           reject(err);
         } else {

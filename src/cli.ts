@@ -76,7 +76,9 @@ program
   .option('-p, --pages <number>', 'Maximum pages to scrape', '10')
   .option('-o, --output <directory>', 'Output directory', './scraped-data')
   .option('--dry-run', 'Show what would be scraped without actually scraping')
-  .action(async (options: ScrapeOptions) => {
+  .option('--incremental', 'Skip existing charts (incremental scraping)')
+  .option('--resume-from-older', 'Resume from older unscraped content')
+  .action(async (options: ScrapeOptions & { incremental?: boolean; resumeFromOlder?: boolean }) => {
     try {
       console.log('🎵 DTX Download - Starting scrape operation...\n');
       
@@ -107,7 +109,11 @@ program
         }
         
         console.log(`🔍 Scraping from: ${targetSource.name}`);
-        const result = await service.scrapeSource(targetSource, { maxPages });
+        const result = await service.scrapeSource(targetSource, { 
+          maxPages,
+          skipExisting: options.incremental || false,
+          resumeFromOlder: options.resumeFromOlder || false
+        });
         
         console.log(`\n✅ Scraping completed for ${targetSource.name}:`);
         console.log(`   📊 Charts found: ${result.chartsFound}`);
@@ -134,7 +140,11 @@ program
         }
         
         console.log('🔍 Scraping from all enabled sources...');
-        const results = await service.scrapeAllSources({ maxPages });
+        const results = await service.scrapeAllSources({ 
+          maxPages,
+          skipExisting: options.incremental || false,
+          resumeFromOlder: options.resumeFromOlder || false
+        });
         
         console.log('\n✅ Scraping completed for all sources:');
         let totalCharts = 0;
@@ -861,6 +871,151 @@ function formatBytes(bytes: number): string {
   
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
+program
+  .command('scrape-progress')
+  .description('View scraping progress for a source')
+  .argument('<source>', 'Source name (e.g., approved-dtx)')
+  .action(async (sourceName: string) => {
+    try {
+      const service = await initializeScrapingService();
+      const db = service.getDatabase();
+      
+      console.log(`📊 Scraping Progress for ${sourceName}\n`);
+      
+      const stats = await db.getScrapingStats(sourceName);
+      const scrapedPages = await db.getScrapedPages(sourceName);
+      
+      if (stats.totalPages === 0) {
+        console.log('❌ No scraping progress found for this source');
+        console.log('💡 Run scraping first to see progress here');
+        service.close();
+        return;
+      }
+      
+      console.log(`📈 Summary:`);
+      console.log(`   Total pages scraped: ${stats.totalPages}`);
+      console.log(`   ✅ Completed: ${stats.completedPages}`);
+      console.log(`   ❌ Failed: ${stats.failedPages}`);
+      console.log(`   📊 Total charts found: ${stats.totalCharts}`);
+      
+      if (stats.lastScrapedAt) {
+        const lastScraped = new Date(stats.lastScrapedAt);
+        const timeSince = Math.round((Date.now() - lastScraped.getTime()) / (1000 * 60 * 60)); // hours
+        console.log(`   🕒 Last scraped: ${lastScraped.toLocaleString()} (${timeSince}h ago)`);
+      }
+      
+      console.log(`\n📋 Recent Pages (showing last 10):`);
+      scrapedPages.slice(0, 10).forEach((page, index) => {
+        const status = page.status === 'completed' ? '✅' : page.status === 'failed' ? '❌' : '⚠️';
+        const time = new Date(page.scrapedAt).toLocaleString();
+        console.log(`   ${index + 1}. ${status} ${page.url}`);
+        console.log(`      📊 ${page.chartsFound} charts found | ${time}`);
+      });
+      
+      if (scrapedPages.length > 10) {
+        console.log(`   ... and ${scrapedPages.length - 10} more pages`);
+      }
+      
+      console.log(`\n💡 Tips:`);
+      console.log(`   • Use "scrape --source ${sourceName} --resume-from-older" to continue from older charts`);
+      console.log(`   • Use "clear-scrape-progress ${sourceName}" to reset progress and start fresh`);
+      
+      service.close();
+    } catch (error) {
+      console.error('❌ Failed to get scraping progress:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('clear-scrape-progress')
+  .description('Clear scraping progress for a source (allows starting fresh)')
+  .argument('<source>', 'Source name (e.g., approved-dtx)')
+  .option('--confirm', 'Confirm without prompting')
+  .action(async (sourceName: string, options: any) => {
+    try {
+      const service = await initializeScrapingService();
+      const db = service.getDatabase();
+      
+      const stats = await db.getScrapingStats(sourceName);
+      
+      if (stats.totalPages === 0) {
+        console.log(`❌ No scraping progress found for ${sourceName}`);
+        service.close();
+        return;
+      }
+      
+      if (!options.confirm) {
+        console.log(`⚠️  This will clear scraping progress for ${sourceName}:`);
+        console.log(`   📊 ${stats.totalPages} scraped pages will be forgotten`);
+        console.log(`   📈 ${stats.totalCharts} recorded chart discoveries will be lost`);
+        console.log(`   ℹ️  Chart data itself will NOT be deleted, only scraping history`);
+        console.log(`\n❓ Use --confirm flag to proceed`);
+        service.close();
+        return;
+      }
+      
+      const deletedCount = await db.clearScrapingProgress(sourceName);
+      console.log(`✅ Cleared scraping progress for ${sourceName}`);
+      console.log(`📊 Removed ${deletedCount} page records`);
+      console.log(`💡 You can now scrape ${sourceName} from the beginning`);
+      
+      service.close();
+    } catch (error) {
+      console.error('❌ Failed to clear scraping progress:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('resume-scrape')
+  .description('Resume scraping from older unscraped content')
+  .argument('<source>', 'Source name (e.g., approved-dtx)')
+  .option('-p, --pages <number>', 'Maximum pages to scrape', '5')
+  .action(async (sourceName: string, options: any) => {
+    try {
+      const service = await initializeScrapingService();
+      const sources = service.getAllSupportedSources();
+      const source = sources.find(s => s.name === sourceName);
+      
+      if (!source) {
+        console.error(`❌ Source '${sourceName}' not found`);
+        console.log('Available sources:', sources.map(s => s.name).join(', '));
+        process.exit(1);
+      }
+      
+      const maxPages = parseInt(options.pages);
+      
+      console.log(`🔄 Resuming scrape for ${sourceName} from older content`);
+      console.log(`📄 Max pages: ${maxPages}`);
+      console.log(`🔍 Looking for unscraped archives and older pages...\n`);
+      
+      const result = await service.scrapeSource(source, { 
+        maxPages,
+        skipExisting: true,
+        resumeFromOlder: true
+      });
+      
+      console.log(`\n✅ Resume scraping completed for ${sourceName}:`);
+      console.log(`   📊 Charts found: ${result.chartsFound}`);
+      console.log(`   ➕ Charts added: ${result.chartsAdded}`);
+      console.log(`   🔄 Duplicates: ${result.chartsDuplicated}`);
+      console.log(`   ⏱️  Duration: ${(result.duration / 1000).toFixed(2)}s`);
+      
+      if (result.errors.length > 0) {
+        console.log(`   ⚠️  Errors: ${result.errors.length}`);
+        result.errors.forEach(error => console.log(`      - ${error}`));
+      }
+      
+      console.log(`\n💡 Use "scrape-progress ${sourceName}" to see updated progress`);
+      
+      service.close();
+    } catch (error) {
+      console.error('❌ Resume scraping failed:', error);
+      process.exit(1);
+    }
+  });
 
 program
   .command('config')

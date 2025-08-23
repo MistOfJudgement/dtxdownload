@@ -16,6 +16,10 @@ export class ScrapingService implements IScrapingService {
   }
 
   registerStrategy(strategy: IScrapingStrategy): void {
+    // If the strategy is a BaseScrapingStrategy, set the database reference
+    if ('database' in strategy && this.database) {
+      (strategy as any).database = this.database;
+    }
     this.strategies.set(strategy.name, strategy);
   }
 

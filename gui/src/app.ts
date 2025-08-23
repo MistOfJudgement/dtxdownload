@@ -651,6 +651,7 @@ export class DTXDownloadManager {
         const source = DOMUtils.getValue('scrapeSource');
         const maxPages = parseInt(DOMUtils.getValue('maxPages')) || 1;
         const incremental = (DOMUtils.getRequiredElement<HTMLInputElement>('incrementalScrape')).checked;
+        const resumeFromOlder = (DOMUtils.getRequiredElement<HTMLInputElement>('resumeFromOlder')).checked;
         
         // Show progress UI
         this.showScrapeProgress();
@@ -664,7 +665,8 @@ export class DTXDownloadManager {
                 const scrapeRequest = {
                     source,
                     maxPages,
-                    incremental
+                    incremental,
+                    resumeFromOlder
                 };
                 
                 const response = await this.apiClient.startScraping(scrapeRequest);

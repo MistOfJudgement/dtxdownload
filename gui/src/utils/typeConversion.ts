@@ -1,5 +1,6 @@
 /**
- * Utilities for converting API responses to GUI types
+ * Minimal utilities for converting API responses to GUI types
+ * Most conversions are now eliminated through type alignment
  */
 
 import { Chart } from '../types/index';
@@ -7,21 +8,16 @@ import { ChartResponse } from '@shared/models';
 
 /**
  * Convert ChartResponse from API to Chart for GUI
+ * Only handles date string to Date object conversion
  */
 export function convertChartResponseToChart(chartResponse: ChartResponse): Chart {
   return {
-    id: chartResponse.id,
-    title: chartResponse.title,
-    artist: chartResponse.artist,
-    bpm: chartResponse.bpm,
-    difficulties: chartResponse.difficulties,
-    source: chartResponse.source,
-    downloadUrl: chartResponse.downloadUrl,
-    previewImageUrl: chartResponse.previewImageUrl || chartResponse.imageUrl,
-    imageUrl: chartResponse.imageUrl || chartResponse.previewImageUrl,
+    ...chartResponse,
+    // Convert ISO date strings to Date objects for GUI
     createdAt: chartResponse.createdAt ? new Date(chartResponse.createdAt) : new Date(),
     updatedAt: chartResponse.updatedAt ? new Date(chartResponse.updatedAt) : new Date(),
-    tags: chartResponse.tags
+    // Ensure imageUrl fallback
+    imageUrl: chartResponse.imageUrl || chartResponse.previewImageUrl
   };
 }
 

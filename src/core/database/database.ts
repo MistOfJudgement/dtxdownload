@@ -28,10 +28,11 @@ export class ChartDatabase {
           artist TEXT NOT NULL,
           bpm TEXT NOT NULL,
           difficulties TEXT, -- JSON string of difficulty array
-          downloadUrl TEXT NOT NULL,
+          downloadUrl TEXT, -- Now optional, can be NULL when no valid download source
           source TEXT NOT NULL,
           tags TEXT, -- JSON string of tags array
           previewImageUrl TEXT,
+          originalPageUrl TEXT NOT NULL, -- Always required for re-scraping
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -77,6 +78,10 @@ export class ChartDatabase {
           }
         });
 
+        // Run migrations for existing databases
+        // Note: Database migration temporarily disabled - will require DB wipe
+        // this.runMigrations();
+
         createIndexes.forEach(sql => {
           this.db.run(sql, (err) => {
             if (err) {
@@ -91,6 +96,83 @@ export class ChartDatabase {
       });
     });
   }
+
+  /**
+   * Run database migrations for schema updates
+   * Note: Temporarily disabled - requires database wipe for new schema
+   */
+  /*
+  private runMigrations(): void {
+    // Migration 1: Remove downloadSourceMissing column and ensure originalPageUrl exists
+    // Note: SQLite doesn't support DROP COLUMN, so we'll work around the existing schema
+    
+    // First, add originalPageUrl if it doesn't exist
+    this.db.run(`
+      ALTER TABLE charts ADD COLUMN originalPageUrl TEXT
+    `, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Migration error for originalPageUrl:', err.message);
+      }
+    });
+
+    // Migration 2: Allow downloadUrl to be NULL by updating existing NOT NULL constraint
+    // This requires recreating the table for SQLite
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS charts_new (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        artist TEXT NOT NULL,
+        bpm TEXT NOT NULL,
+        difficulties TEXT,
+        downloadUrl TEXT,
+        source TEXT NOT NULL,
+        tags TEXT,
+        previewImageUrl TEXT,
+        originalPageUrl TEXT NOT NULL,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `, (err) => {
+      if (err) {
+        console.error('Migration error creating new table:', err.message);
+        return;
+      }
+
+      // Copy data from old table, setting originalPageUrl to downloadUrl if missing
+      this.db.run(`
+        INSERT INTO charts_new (id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, originalPageUrl, createdAt, updatedAt)
+        SELECT id, title, artist, bpm, difficulties, 
+               CASE WHEN downloadSourceMissing = 1 THEN NULL ELSE downloadUrl END,
+               source, tags, previewImageUrl, 
+               COALESCE(originalPageUrl, downloadUrl, 'unknown'),
+               createdAt, updatedAt
+        FROM charts
+        WHERE NOT EXISTS (SELECT 1 FROM charts_new WHERE charts_new.id = charts.id)
+      `, (err) => {
+        if (err) {
+          console.error('Migration error copying data:', err.message);
+          return;
+        }
+
+        // Drop old table and rename new one
+        this.db.run(`DROP TABLE IF EXISTS charts`, (err) => {
+          if (err) {
+            console.error('Migration error dropping old table:', err.message);
+            return;
+          }
+
+          this.db.run(`ALTER TABLE charts_new RENAME TO charts`, (err) => {
+            if (err) {
+              console.error('Migration error renaming table:', err.message);
+            } else {
+              console.log('✅ Database migration completed');
+            }
+          });
+        });
+      });
+    });
+  }
+  */
 
   /**
    * Ensure database is initialized before operations
@@ -108,8 +190,8 @@ export class ChartDatabase {
     return new Promise((resolve, reject) => {
       const sql = `
         INSERT OR REPLACE INTO charts (
-          id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, originalPageUrl, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `;
 
       const params = [
@@ -118,10 +200,11 @@ export class ChartDatabase {
         chart.artist,
         chart.bpm,
         JSON.stringify(chart.difficulties || []),
-        chart.downloadUrl,
+        chart.downloadUrl || null, // Allow null for missing download sources
         chart.source,
         JSON.stringify(chart.tags || []),
         chart.previewImageUrl || null,
+        chart.originalPageUrl, // Now required
         chart.createdAt ? chart.createdAt.toISOString() : new Date().toISOString()
       ];
 
@@ -144,8 +227,8 @@ export class ChartDatabase {
     return new Promise((resolve) => {
       const sql = `
         INSERT OR REPLACE INTO charts (
-          id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          id, title, artist, bpm, difficulties, downloadUrl, source, tags, previewImageUrl, originalPageUrl, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `;
 
       const errors: string[] = [];
@@ -169,10 +252,11 @@ export class ChartDatabase {
             chart.artist,
             chart.bpm,
             JSON.stringify(chart.difficulties || []),
-            chart.downloadUrl,
+            chart.downloadUrl || null, // Allow null for missing download sources
             chart.source,
             JSON.stringify(chart.tags || []),
             chart.previewImageUrl || null,
+            chart.originalPageUrl, // Now required
             chart.createdAt ? chart.createdAt.toISOString() : new Date().toISOString()
           ];
 
@@ -552,10 +636,11 @@ export class ChartDatabase {
       artist: row.artist,
       bpm: row.bpm,
       difficulties: row.difficulties ? JSON.parse(row.difficulties) : [],
-      downloadUrl: row.downloadUrl,
+      downloadUrl: row.downloadUrl || undefined, // Handle NULL values from database
       source: row.source,
       tags: row.tags ? JSON.parse(row.tags) : [],
       previewImageUrl: row.previewImageUrl || undefined,
+      originalPageUrl: row.originalPageUrl, // Now required field
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt)
     };

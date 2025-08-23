@@ -2,19 +2,19 @@
  * Core types and interfaces for DTX Download Manager GUI
  */
 
-export interface Chart {
-    id: string;
-    title: string;
-    artist: string;
-    bpm: string;
-    difficulties: number[];
-    source: string;
-    downloadUrl: string;
-    previewImageUrl?: string;
-    imageUrl?: string;
-    createdAt: Date;
-    updatedAt: Date;
-    tags: string[];
+import type { IChart } from '../../../src/core/models';
+
+/**
+ * GUI Chart interface derived from core IChart with Date objects
+ * This ensures the GUI stays in sync with the core chart model
+ */
+export interface Chart extends Omit<IChart, 'createdAt' | 'updatedAt'> {
+  /** Date objects for GUI use */
+  createdAt: Date;
+  updatedAt: Date;
+  
+  /** Optional image URL (alias for previewImageUrl) */
+  imageUrl?: string;
 }
 
 export interface FilterConfig {

@@ -137,7 +137,7 @@ export class ChartManager {
             
             if (filters.provider) {
                 filtered = filtered.filter(chart => {
-                    const provider = detectDownloadProvider(chart.downloadUrl);
+                    const provider = detectDownloadProvider(chart.downloadUrl || '');
                     return provider === filters.provider;
                 });
             }

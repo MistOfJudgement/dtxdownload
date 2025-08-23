@@ -326,7 +326,7 @@ export class DTXDownloadManager {
         const imageUrl = chart.previewImageUrl || chart.imageUrl || this.getPlaceholderImage();
         
         // Detect download provider from URL
-        const provider = detectDownloadProvider(chart.downloadUrl);
+        const provider = detectDownloadProvider(chart.downloadUrl || '');
         const providerInfo = getDownloadProviderInfo(provider);
         
         return `
@@ -362,7 +362,7 @@ export class DTXDownloadManager {
         const imageUrl = chart.previewImageUrl || chart.imageUrl || this.getPlaceholderImage(60);
         
         // Detect download provider from URL
-        const provider = detectDownloadProvider(chart.downloadUrl);
+        const provider = detectDownloadProvider(chart.downloadUrl || '');
         const providerInfo = getDownloadProviderInfo(provider);
         
         return `

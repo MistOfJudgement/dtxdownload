@@ -3,6 +3,9 @@
  * These interfaces define the contract between the GUI and API server
  */
 
+// Import core chart interface for type manipulation
+import type { IChart } from '../src/core/models';
+
 // Request Models
 export interface DownloadRequest {
   chartIds: string[];
@@ -20,21 +23,46 @@ export interface ScrapeRequest {
   resumeFromOlder?: boolean;
 }
 
-export interface ChartQuery {
-  query?: string; // General search query
-  source?: string;
-  artist?: string;
-  title?: string;
-  titleContains?: string; // For partial title matches
+/**
+ * Chart query interface derived from IChart using type manipulation
+ * This ensures the API query stays in sync with the core chart model
+ */
+type FilterableChartFields = Pick<IChart, 'title' | 'artist' | 'source' | 'bpm' | 'tags'>;
+type SortableChartFields = keyof Pick<IChart, 'title' | 'artist' | 'bpm' | 'createdAt' | 'updatedAt'>;
+
+export interface ChartQuery extends Partial<FilterableChartFields> {
+  /** General search query across multiple fields */
+  query?: string;
+  
+  /** Partial title match */
+  titleContains?: string;
+  
+  /** Minimum BPM */
   minBpm?: number;
+  
+  /** Maximum BPM */
   maxBpm?: number;
+  
+  /** Minimum difficulty */
   minDifficulty?: number;
+  
+  /** Maximum difficulty */
   maxDifficulty?: number;
-  sources?: string[]; // Multiple sources filter
-  limit?: number;
-  offset?: number;
-  sortBy?: string;
+  
+  /** Multiple sources filter */
+  sources?: string[];
+  
+  /** Sort field - derived from IChart keys */
+  sortBy?: SortableChartFields;
+  
+  /** Sort order */
   sortOrder?: 'asc' | 'desc';
+  
+  /** Pagination offset */
+  offset?: number;
+  
+  /** Pagination limit */
+  limit?: number;
 }
 
 // Response Models
@@ -46,19 +74,17 @@ export interface ApiResponse<T = any> {
   deletedCount?: number;
 }
 
-export interface ChartResponse {
-  id: string;
-  title: string;
-  artist: string;
-  bpm: string;
-  difficulties: number[];
-  downloadUrl: string;
+/**
+ * Chart response interface derived from IChart using type manipulation
+ * This ensures the API response stays in sync with the core chart model
+ */
+export interface ChartResponse extends Omit<IChart, 'createdAt' | 'updatedAt'> {
+  /** Optional image URL (alias for previewImageUrl) */
   imageUrl?: string;
-  previewImageUrl?: string;
-  source: string;
+  
+  /** ISO date strings for JSON serialization */
   createdAt?: string;
   updatedAt?: string;
-  tags: string[];
 }
 
 export interface ChartsListResponse {

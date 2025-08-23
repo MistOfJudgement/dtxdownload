@@ -343,12 +343,15 @@ program
         'Google Drive Files': 0,
         'Direct Links': 0,
         'Blog Posts': 0,
+        'Missing Download Source': 0,
         'Other': 0
       };
       
       allCharts.forEach(chart => {
         const url = chart.downloadUrl;
-        if (url.includes('drive.google.com/drive/folders/')) {
+        if (!url) {
+          urlTypes['Missing Download Source']++;
+        } else if (url.includes('drive.google.com/drive/folders/')) {
           urlTypes['Google Drive Folders']++;
         } else if (url.includes('drive.google.com/file/d/') || url.includes('drive.google.com/uc?')) {
           urlTypes['Google Drive Files']++;
@@ -817,10 +820,12 @@ program
       
       charts.forEach(chart => {
         const url = chart.downloadUrl;
-        if (!folderGroups.has(url)) {
-          folderGroups.set(url, []);
+        if (url) { // Only group charts that have download URLs
+          if (!folderGroups.has(url)) {
+            folderGroups.set(url, []);
+          }
+          folderGroups.get(url)!.push(chart);
         }
-        folderGroups.get(url)!.push(chart);
       });
       
       console.log(`📦 Found ${charts.length} charts in ${folderGroups.size} folders:\n`);

@@ -49,8 +49,8 @@ describe('E2E: Download and Unzip', () => {
       // Use the real "Bare your teeth" chart data
       const testChart: IChart = {
         ...testChartBareYourTeeth.expected,
-        // Ensure we have the real Google Drive URL
-        downloadUrl: testChartBareYourTeeth.expected.downloadUrl
+        // Only override if the original has a download URL
+        ...(testChartBareYourTeeth.expected.downloadUrl && { downloadUrl: testChartBareYourTeeth.expected.downloadUrl })
       };
 
       console.log(`📋 Chart: "${testChart.title}" by ${testChart.artist}`);
@@ -137,6 +137,7 @@ describe('E2E: Download and Unzip', () => {
         difficulties: [5.0, 6.0, 7.0, 8.0],
         source: 'test',
         downloadUrl: 'https://drive.google.com/drive/folders/1example_folder_id/view',
+        originalPageUrl: 'https://test.example.com/folder-chart',
         tags: [],
         previewImageUrl: 'https://example.com/preview.jpg',
         createdAt: new Date(),
@@ -174,6 +175,7 @@ describe('E2E: Download and Unzip', () => {
         difficulties: [4.0, 5.5, 7.0, 8.5],
         source: 'test',
         downloadUrl: 'https://drive.google.com/file/d/1example_file_id/view',
+        originalPageUrl: 'https://test.example.com/file-chart',
         tags: [],
         previewImageUrl: 'https://example.com/preview.jpg',
         createdAt: new Date(),
@@ -212,6 +214,7 @@ describe('E2E: Download and Unzip', () => {
         difficulties: [3.0, 4.5, 6.0, 7.5],
         source: 'test',
         downloadUrl: 'https://httpbin.org/bytes/1024', // Returns 1KB of random data
+        originalPageUrl: 'https://test.example.com/http-chart',
         tags: [],
         previewImageUrl: 'https://example.com/preview.jpg',
         createdAt: new Date(),
@@ -383,6 +386,7 @@ describe('E2E: Download and Unzip', () => {
         difficulties: [4.0 + i, 5.0 + i, 6.0 + i, 7.0 + i],
         source: 'test',
         downloadUrl: 'https://httpbin.org/status/404', // Will fail but tests concurrency
+        originalPageUrl: `https://test.example.com/concurrent-${i}`,
         tags: [],
         previewImageUrl: 'https://example.com/preview.jpg',
         createdAt: new Date(),

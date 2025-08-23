@@ -122,9 +122,10 @@ export class DTXApiServer {
             artist: chart.artist,
             bpm: chart.bpm,
             difficulties: chart.difficulties,
-            downloadUrl: chart.downloadUrl,
+            originalPageUrl: chart.originalPageUrl,
             source: chart.source,
             tags: chart.tags,
+            ...(chart.downloadUrl && { downloadUrl: chart.downloadUrl }),
             ...(chart.previewImageUrl && { imageUrl: chart.previewImageUrl }),
             ...(chart.createdAt && { createdAt: chart.createdAt.toISOString() })
           })),

@@ -129,9 +129,6 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
         return null; // BPM is required
       }
       
-      // Determine which batch folder this chart belongs to based on chart number
-      const chartNumber = parseInt(chartId);
-      
       // Extract download URL - look for Google Drive links directly in the HTML and text
       let downloadUrl = '';
       const $post = $(element);
@@ -177,11 +174,9 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
         }
       }
       
-      // Fallback: If no individual file URL found, use batch folder but mark it for enhancement
+      // Fallback: If no individual file URL found, allow chart without download URL
       if (!downloadUrl || downloadUrl === '') {
-        const batchFolder = this.getBatchFolderUrl(chartNumber);
-        downloadUrl = batchFolder;
-        console.log(`⚠️  Using batch folder for chart #${chartId}, will need individual file URL extraction`);
+        console.log(`⚠️  Chart #${chartId} has no individual download URL - will be marked as missing download source`);
       }
       
       // Extract preview image
@@ -194,12 +189,17 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
         artist,
         bpm: bpm.toString(),
         difficulties,
-        downloadUrl: downloadUrl || chartUrl || '',
+        originalPageUrl: chartUrl || this.baseUrl, // Use chart page URL or base URL as fallback
         source: this.name,
         tags: ['dtx', 'drum'],
         createdAt: new Date(),
         updatedAt: new Date()
       };
+      
+      // Only add downloadUrl if we found one
+      if (downloadUrl) {
+        chart.downloadUrl = downloadUrl;
+      }
       
       if (imageUrl) {
         chart.previewImageUrl = imageUrl;
@@ -297,44 +297,6 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
       .replace(/^-|-$/g, '');
     
     return sanitized.substring(0, 100); // Reasonable length limit
-  }
-
-  /**
-   * Get the Google Drive batch folder URL for a chart number
-   */
-  private getBatchFolderUrl(chartNumber: number): string {
-    // ApprovedDTX organizes charts into batch folders of 50
-    const batchStart = Math.floor((chartNumber - 1) / 50) * 50 + 1;
-    const batchEnd = batchStart + 49;
-    
-    // Map of batch ranges to their Google Drive folder URLs (from the sidebar)
-    const batchFolders: Record<string, string> = {
-      '1-50': 'https://drive.google.com/drive/folders/1OqQmBL0yocFgVpPo74KCmsVaeiBct0oj?usp=share_link',
-      '51-100': 'https://drive.google.com/drive/folders/1T3MbYe4iksTpckLSG7ITEtGV6EtcreXC?usp=sharing',
-      '101-150': 'https://drive.google.com/drive/folders/1gA_JAQXaJUAyBjz942-LHiWyzivlqWdf?usp=sharing',
-      '151-200': 'https://drive.google.com/drive/folders/1nKzCG_JLQjkgLv5Qk8IO_1OOBqdiC7DW?usp=sharing',
-      '251-300': 'https://drive.google.com/drive/folders/1FIInAxTn4FK2HdSWcKmMIcpc3Rl3I7SS?usp=sharing',
-      '401-450': 'https://drive.google.com/drive/folders/1jY3WiTUE5L80YtWOtj50JKTpc1rfrrXW?usp=sharing',
-      '451-500': 'https://drive.google.com/drive/folders/1YPWiNzhk0CBNbv5w6LxX7XrUjpW9lLr2?usp=sharing',
-      '501-550': 'https://drive.google.com/drive/folders/1_ElmLSDCVUTDRNe4b0KtFbuz2nLPQ7N_?usp=share_link',
-      '551-600': 'https://drive.google.com/drive/folders/14BGsydYepg0TOfScABvl3AN_vjKHK2Ho?usp=share_link',
-      '601-650': 'https://drive.google.com/drive/folders/105RE7HxD7deFJOsgraO1a-nb3ofDA0Qu?usp=share_link',
-      '651-700': 'https://drive.google.com/drive/folders/1BjfiLenB20_erwgP3haPFimKIMUqtq92?usp=sharing',
-      '701-750': 'https://drive.google.com/drive/folders/1qLxtkCAycGFAY12mcKs8ov5TVdkmRNBe?usp=sharing',
-      '751-800': 'https://drive.google.com/drive/folders/1Bc25PnPgU-lVM7k5fRxtcUFaQeqU_95Y?usp=sharing',
-      '801-850': 'https://drive.google.com/drive/folders/178FeZTO_JbH37dBwNwvlLW0peneB_fBU?usp=sharing',
-      '851-900': 'https://drive.google.com/drive/folders/1P1uAzSWdj9RsA1idiPDWHG__bBbZGiQ1?usp=sharing',
-      '901-950': 'https://drive.google.com/drive/folders/1CT2dAqAELo8gFsK4GY6m4l5jatAg2lJe?usp=share_link',
-      '951-1000': 'https://drive.google.com/drive/folders/1aoZfht7OCsSgI8uCRLYgAEdX2-QUD0cJ?usp=share_link',
-      '1001-1050': 'https://drive.google.com/drive/folders/1Xcrj42CbAVeLIp3tttoerz1HEOpxdxyO?usp=sharing',
-      '1051-1100': 'https://drive.google.com/drive/folders/1TUz7IeS4GZbgh9BZUPz4gBPTxX4ZiPb6?usp=sharing',
-      '1101-1150': 'https://drive.google.com/drive/folders/1q7haQsCW7e9HWqQndbkRxMKOOR7SvJ9z?usp=sharing',
-      '1151-1200': 'https://drive.google.com/drive/folders/1J-JwS1-rp-erRdd5XKtWWDuXEPWS4rtR?usp=sharing',
-      '1201-1250': 'https://drive.google.com/drive/folders/1FabkY1S6vgySUfLKGyAHnmYdZ1rn8YjQ?usp=sharing'
-    };
-    
-    const batchKey = `${batchStart}-${batchEnd}`;
-    return batchFolders[batchKey] || `https://drive.google.com/drive/folders/unknown-batch-${batchStart}-${batchEnd}`;
   }
 
   /**

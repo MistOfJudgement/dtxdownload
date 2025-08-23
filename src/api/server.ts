@@ -482,13 +482,13 @@ export class DTXApiServer {
           aVal = parseInt(a.bpm);
           bVal = parseInt(b.bpm);
           break;
-        case 'difficulty':
-          aVal = a.difficulties ? Math.max(...a.difficulties) : 0;
-          bVal = b.difficulties ? Math.max(...b.difficulties) : 0;
-          break;
         case 'createdAt':
           aVal = new Date(a.createdAt || 0);
           bVal = new Date(b.createdAt || 0);
+          break;
+        case 'updatedAt':
+          aVal = new Date(a.updatedAt || 0);
+          bVal = new Date(b.updatedAt || 0);
           break;
         default:
           return 0;

@@ -104,8 +104,8 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
         console.log(`📋 Found ${sampleCharts.length} sample charts for download testing:`);
         sampleCharts.forEach((chart, index) => {
           console.log(`   ${index + 1}. "${chart.title}" by ${chart.artist} (${chart.bpm})`);
-          console.log(`      Download: ${chart.downloadUrl}`);
-          console.log(`      Type: ${getUrlType(chart.downloadUrl)}`);
+          console.log(`      Download: ${chart.downloadUrl || 'No download URL'}`);
+          console.log(`      Type: ${chart.downloadUrl ? getUrlType(chart.downloadUrl) : 'Missing'}`);
         });
       }
       
@@ -130,9 +130,9 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
         
         // Analyze download results by URL type
         const urlTypes = {
-          folder: downloadResults.filter(r => r.chart.downloadUrl.includes('/folders/')),
-          file: downloadResults.filter(r => r.chart.downloadUrl.includes('/file/d/')),
-          other: downloadResults.filter(r => !r.chart.downloadUrl.includes('drive.google.com'))
+          folder: downloadResults.filter(r => r.chart.downloadUrl && r.chart.downloadUrl.includes('/folders/')),
+          file: downloadResults.filter(r => r.chart.downloadUrl && r.chart.downloadUrl.includes('/file/d/')),
+          other: downloadResults.filter(r => r.chart.downloadUrl && !r.chart.downloadUrl.includes('drive.google.com'))
         };
         
         console.log(`📊 Results by URL type:`);
@@ -268,6 +268,7 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
           difficulties: [5.0, 6.0, 7.0, 8.0],
           source: 'test',
           downloadUrl: 'https://drive.google.com/drive/folders/test123/view',
+          originalPageUrl: 'https://test.example.com/chart-folder',
           tags: [],
           previewImageUrl: '',
           createdAt: new Date(),
@@ -281,6 +282,7 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
           difficulties: [4.0, 5.0, 6.0, 7.0],
           source: 'test',
           downloadUrl: 'https://drive.google.com/file/d/test456/view',
+          originalPageUrl: 'https://test.example.com/chart-file',
           tags: [],
           previewImageUrl: '',
           createdAt: new Date(),
@@ -294,6 +296,7 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
           difficulties: [6.0, 7.0, 8.0, 9.0],
           source: 'test',
           downloadUrl: 'https://invalid-domain-that-does-not-exist.com/file.zip',
+          originalPageUrl: 'https://test.example.com/chart-invalid',
           tags: [],
           previewImageUrl: '',
           createdAt: new Date(),
@@ -314,7 +317,7 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
       
       console.log('📊 Mixed URL type results:');
       results.forEach((result, index) => {
-        const urlType = getUrlType(result.chart.downloadUrl);
+        const urlType = result.chart.downloadUrl ? getUrlType(result.chart.downloadUrl) : 'Missing';
         console.log(`   ${index + 1}. ${result.chart.title} (${urlType}): ${result.success ? 'SUCCESS' : 'FAILED'}`);
         if (!result.success) {
           console.log(`      Error: ${result.error}`);
@@ -322,9 +325,9 @@ describe('E2E: Full Workflow (Scraping + Download)', () => {
       });
       
       // Verify expected behavior
-      const folderResult = results.find(r => r.chart.downloadUrl.includes('/folders/'));
-      const fileResult = results.find(r => r.chart.downloadUrl.includes('/file/d/'));
-      const invalidResult = results.find(r => r.chart.downloadUrl.includes('invalid-domain'));
+      const folderResult = results.find(r => r.chart.downloadUrl && r.chart.downloadUrl.includes('/folders/'));
+      const fileResult = results.find(r => r.chart.downloadUrl && r.chart.downloadUrl.includes('/file/d/'));
+      const invalidResult = results.find(r => r.chart.downloadUrl && r.chart.downloadUrl.includes('invalid-domain'));
       
       // Folder URLs should fail with specific message
       expect(folderResult?.success).toBe(false);

@@ -194,8 +194,18 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
         throw new ChartValidationError('Artist is required', 'artist');
       }
       
-      if (!chart.downloadUrl?.trim()) {
-        throw new ChartValidationError('Download URL is required', 'downloadUrl');
+      if (!chart.originalPageUrl?.trim()) {
+        throw new ChartValidationError('Original page URL is required for re-scraping', 'originalPageUrl');
+      }
+      
+      // Allow charts without download URLs (they will be marked as missing download source)
+      if (chart.downloadUrl) {
+        // If download URL exists, validate it's not a Google Drive folder
+        if (this.isGoogleDriveFolderUrl(chart.downloadUrl)) {
+          // Don't reject, just remove the download URL to mark as missing
+          delete (chart as any).downloadUrl;
+          console.warn(`⚠️  Removing Google Drive folder URL for chart: ${chart.title} by ${chart.artist}`);
+        }
       }
       
       if (!chart.difficulties || chart.difficulties.length === 0) {
@@ -216,6 +226,13 @@ export abstract class BaseScrapingStrategy implements IScrapingStrategy {
       }
       return false;
     }
+  }
+
+  /**
+   * Check if URL is a Google Drive folder
+   */
+  protected isGoogleDriveFolderUrl(url: string): boolean {
+    return url.includes('drive.google.com/drive/folders/');
   }
 
   protected extractTextContent($: cheerio.CheerioAPI, selector: string): string {

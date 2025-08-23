@@ -59,6 +59,7 @@ const testChartBareYourTeeth: {
         difficulties: [2.9, 4.6, 6.4, 7.4],
         source: 'approved-dtx',
         downloadUrl: 'https://drive.google.com/file/d/1g7QkrjMDP07InPHEJZ9oDJtJogMnTa7D/view?usp=sharing',
+        originalPageUrl: 'https://approvedtx.blogspot.com/2022/02/768-bare-your-teeth.html',
         previewImageUrl: 'https://blogger.googleusercontent.com/img/a/AVvXsEi5C87WmydfPa7US2AxA1qnYCosIC8Heqdn6zsEHuHuF56BkkQcTmr6xALAksb6yXRMZjALEMhCifmT-PoDYOa-ilCn51csnL16rotJBqcHwIVSe5LzZ45LzDkhRzzQYvoMaCEUfyrxReEcS67RmN8JQYcF4kkbbBHFa-QpDIo0qPjYjW12n8rJqQJ1=s200',
         createdAt: new Date('2022-02-01T00:00:00Z'),
         updatedAt: new Date('2022-02-01T00:00:00Z'),

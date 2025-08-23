@@ -46,6 +46,17 @@ export class ChartDownloader {
       
       this.activeDownloads.add(chart.id);
       
+      // Check if chart has a download URL
+      if (!chart.downloadUrl) {
+        return {
+          chart,
+          success: false,
+          error: `No download source available for this chart. Chart needs to be re-scraped or manually updated.`,
+          fileSize: 0,
+          downloadTime: Date.now() - startTime
+        };
+      }
+      
       // Determine file path
       const filePath = this.getFilePath(chart, options);
       
@@ -223,7 +234,7 @@ export class ChartDownloader {
       }
       
       // Extract file ID from various Google Drive URL formats
-      const fileId = this.extractGoogleDriveFileId(chart.downloadUrl);
+      const fileId = this.extractGoogleDriveFileId(chart.downloadUrl!); // Safe since we checked above
       if (!fileId) {
         throw new Error('Could not extract Google Drive file ID from URL');
       }
@@ -912,7 +923,7 @@ export class ChartDownloader {
     // Method 2: Try following redirects to get actual download URL
     try {
       console.log(`🔄 Trying OneDrive redirect resolution...`);
-      const fileSize = await this.downloadFile(chart.downloadUrl, filePath, options, chart);
+      const fileSize = await this.downloadFile(chart.downloadUrl!, filePath, options, chart); // Safe since we checked above
       
       return {
         chart,

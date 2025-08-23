@@ -20,8 +20,8 @@ export interface IChart {
   /** Source identifier (e.g., "approved-dtx") */
   source: string;
   
-  /** URL to download the chart */
-  downloadUrl: string;
+  /** URL to download the chart (undefined when no valid download source found) */
+  downloadUrl?: string;
   
   /** Optional preview image URL */
   previewImageUrl?: string;
@@ -34,6 +34,9 @@ export interface IChart {
   
   /** When the chart was last updated */
   updatedAt: Date;
+  
+  /** Original page URL where this chart was found (always required for re-scraping) */
+  originalPageUrl: string;
 }
 
 /**
@@ -66,31 +69,41 @@ export interface IChartFilters {
 }
 
 /**
- * Options for querying charts from database
+ * Base type for filtering IChart properties
+ * This uses TypeScript's utility types to automatically derive filter fields from IChart
  */
-export interface ChartQueryOptions {
-  /** Filter by source */
-  source?: string;
+type FilterableChartFields = Pick<IChart, 'title' | 'artist' | 'source' | 'bpm' | 'tags'>;
+
+/**
+ * Chart query options derived from IChart using type manipulation
+ * This ensures the query interface stays in sync with the chart model
+ */
+export interface ChartQueryOptions extends Partial<FilterableChartFields> {
+  /** General search query across multiple fields */
+  query?: string;
   
-  /** Filter by artist (partial match) */
-  artist?: string;
+  /** Partial title match */
+  titleContains?: string;
   
-  /** Filter by title (partial match) */
-  title?: string;
-  
-  /** Filter by minimum BPM */
+  /** Minimum BPM */
   minBpm?: number;
   
-  /** Filter by maximum BPM */
+  /** Maximum BPM */
   maxBpm?: number;
   
-  /** Filter by tags */
-  tags?: string[];
+  /** Minimum difficulty */
+  minDifficulty?: number;
   
-  /** Sort field */
-  sortBy?: 'title' | 'artist' | 'bpm' | 'createdAt' | 'updatedAt';
+  /** Maximum difficulty */
+  maxDifficulty?: number;
   
-  /** Sort order */
+  /** Multiple sources filter */
+  sources?: string[];
+  
+  /** Sort field - derived from IChart keys */
+  sortBy?: keyof Pick<IChart, 'title' | 'artist' | 'bpm' | 'createdAt' | 'updatedAt'>;
+  
+  /** Sort order (database uses uppercase) */
   sortOrder?: 'ASC' | 'DESC';
   
   /** Pagination offset */

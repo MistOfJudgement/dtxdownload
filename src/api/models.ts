@@ -3,6 +3,13 @@
  * These interfaces define the contract between the GUI and API server
  */
 
+// Import shared models to avoid duplication
+import type { ChartResponse } from '../../shared/models';
+export { 
+  ChartQuery, 
+  ApiResponse 
+} from '../../shared/models';
+
 // Request Models
 export interface DownloadRequest {
   chartIds: string[];
@@ -18,40 +25,6 @@ export interface ScrapeRequest {
   sourceName?: string;
   maxPages?: number;
   requestDelay?: number;
-}
-
-export interface ChartQuery {
-  source?: string;
-  artist?: string;
-  title?: string;
-  minBpm?: number;
-  maxBpm?: number;
-  limit?: number;
-  offset?: number;
-}
-
-// Response Models
-export interface ApiResponse<T = any> {
-  success?: boolean;
-  error?: string;
-  message?: string;
-  data?: T;
-  deletedCount?: number;
-}
-
-export interface ChartResponse {
-  id: string;
-  title: string;
-  artist: string;
-  bpm: string;
-  difficulties: number[];
-  downloadUrl: string;
-  imageUrl?: string;
-  previewImageUrl?: string;
-  source: string;
-  createdAt?: string;
-  updatedAt?: string;
-  tags: string[];
 }
 
 export interface ChartsListResponse {

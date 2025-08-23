@@ -135,7 +135,7 @@ export class DownloadService {
 
     console.log(`🚀 Starting download of ${charts.length} charts...`);
     
-    const folderUrls = charts.filter(c => c.downloadUrl.includes('drive.google.com/drive/folders/')).length;
+    const folderUrls = charts.filter(c => c.downloadUrl && c.downloadUrl.includes('drive.google.com/drive/folders/')).length;
     if (folderUrls > 0) {
       console.log(`📁 Note: ${folderUrls} charts point to Google Drive folders (will provide folder links)`);
     }

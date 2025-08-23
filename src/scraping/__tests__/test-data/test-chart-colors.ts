@@ -54,6 +54,7 @@ export const testChartColorsExpected: IChart = {
     difficulties: [1.2, 3.9, 5.8, 7.1],
     source: 'approved-dtx',
     downloadUrl: 'https://1drv.ms/u/s!AkFLx6UquiX21jtQBuWBNuPwxpl4?e=NcsUge',
+    originalPageUrl: 'https://approvedtx.blogspot.com/2021/12/colors.html',
     previewImageUrl: 'https://blogger.googleusercontent.com/img/a/AVvXsEjPA29clDYBb2dvsL3Chsr4oKltQx_Odx1QFavJUdBvmBqnngrl7X3PRqm0RV931J_Ne1F5gcsMGXsmubhnr2c29cUmzzbE_RQ0S_pncZLZYKjPfW7fT00J7Na6xPwSbeBSlfUbwTvF5C-6TYQ8Llr2KAzNHa9OhUPTfoC-y_nMXcUpSn5V1mLNCGeZ=s200',
     createdAt: new Date('2021-12-01T00:00:00Z'),
     updatedAt: new Date('2021-12-01T00:00:00Z'),

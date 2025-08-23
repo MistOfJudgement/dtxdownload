@@ -41,6 +41,7 @@ describe('Real OneDrive Download with Browser Automation', () => {
       difficulties: [2.6, 4.9, 6.3, 7.3],
       source: 'approved-dtx',
       downloadUrl: 'https://1drv.ms/u/s!AkFLx6UquiX21i-f3pAr5zM_mFUQ?e=RPsphm',
+      originalPageUrl: 'https://approvedtx.blogspot.com/test/example.html',
       tags: [],
       previewImageUrl: '',
       createdAt: new Date(),

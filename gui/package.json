@@ -2,7 +2,7 @@
   "name": "dtx-download-manager-gui",
   "version": "1.0.0",
   "description": "DTX Download Manager Frontend",
-  "main": "dist/app.js",
+  "main": "dist/gui/src/app.js",
   "scripts": {
     "build": "tsc && npm run copy-assets",
     "build:watch": "tsc --watch",

@@ -4,7 +4,7 @@
   "description": "Download tool for DTXMania charts",
   "main": "dist/electron/main.js",
   "bin": {
-    "dtx-download": "dist/cli.js"
+    "dtx-download": "dist/src/cli.js"
   },
   "scripts": {
     "electron:rebuild": "electron-rebuild",
@@ -14,8 +14,8 @@
     "build:all": "npm run build && npm run build:gui && npm run build:electron",
     "dev": "tsc --watch",
     "start": "npm run electron",
-    "server": "npm run build && node dist/api/server.js",
-    "server:dev": "tsc && concurrently \"tsc --watch\" \"nodemon dist/api/server.js\"",
+    "server": "npm run build && node dist/src/api/server.js",
+    "server:dev": "tsc && concurrently \"tsc --watch\" \"nodemon dist/src/api/server.js\"",
     "electron": "npm run build:all && electron .",
     "test": "jest --detectOpenHandles",
     "test:unit": "jest --testPathPattern=src --detectOpenHandles",
@@ -28,12 +28,12 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "clean": "rimraf dist",
-    "dtx": "npm run build && node dist/cli.js",
-    "dtx:scrape": "npm run build && node dist/cli.js scrape approved-dtx",
-    "dtx:stats": "npm run build && node dist/cli.js stats",
-    "dtx:search": "npm run build && node dist/cli.js search",
-    "dtx:download": "npm run build && node dist/cli.js download",
-    "dtx:help": "npm run build && node dist/cli.js --help"
+    "dtx": "npm run build && node dist/src/cli.js",
+    "dtx:scrape": "npm run build && node dist/src/cli.js scrape approved-dtx",
+    "dtx:stats": "npm run build && node dist/src/cli.js stats",
+    "dtx:search": "npm run build && node dist/src/cli.js search",
+    "dtx:download": "npm run build && node dist/src/cli.js download",
+    "dtx:help": "npm run build && node dist/src/cli.js --help"
   },
   "author": "Tushar Rangaswamy",
   "license": "ISC",

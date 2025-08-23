@@ -129,21 +129,56 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
         return null; // BPM is required
       }
       
-      // Extract download URL - look for Google Drive links directly in the HTML and text
+      // Extract download URL - look for various download sources
+      // IMPORTANT: Search only within this specific chart element, not the entire page
       let downloadUrl = '';
       const $post = $(element);
       
-      // Priority 1: Look for Google Drive file links in href attributes
+      // Priority 1: Look for download links in href attributes within this chart element (most reliable)
       $post.find('a').each((_, linkElement) => {
         const href = $(linkElement).attr('href');
-        if (href && href.includes('drive.google.com/file/d/')) {
-          downloadUrl = href;
-          return false; // Break the loop
+        const linkText = $(linkElement).text().trim().toLowerCase();
+        
+        // Look for download-like links (DL, download, etc.) with OneDrive or Google Drive URLs
+        if (href && (linkText === 'dl' || linkText === 'download' || linkText.includes('download'))) {
+          if (href.includes('1drv.ms') || href.includes('drive.google.com/file/d/')) {
+            downloadUrl = href;
+            return false; // Break the loop - found specific chart download
+          }
         }
         return; // Explicit return for all code paths
       });
       
-      // Priority 2: Look for Google Drive file links in the text content
+      // Priority 2: Look for [DL] markdown links (less common but possible)
+      if (!downloadUrl) {
+        const dlLinkMatch = textContent.match(/\[DL\]\s*\(([^)]+)\)/);
+        if (dlLinkMatch) {
+          downloadUrl = dlLinkMatch[1];
+        }
+      }
+      
+      // Priority 3: Look for any OneDrive links in text content within this chart element
+      if (!downloadUrl) {
+        const onedriveMatch = textContent.match(/https?:\/\/1drv\.ms\/[^\s\)]+/);
+        if (onedriveMatch) {
+          downloadUrl = onedriveMatch[0];
+        }
+      }
+      
+      
+      // Priority 4: Look for any Google Drive file links in href attributes within this chart element  
+      if (!downloadUrl) {
+        $post.find('a').each((_, linkElement) => {
+          const href = $(linkElement).attr('href');
+          if (href && href.includes('drive.google.com/file/d/')) {
+            downloadUrl = href;
+            return false; // Break the loop
+          }
+          return; // Explicit return for all code paths
+        });
+      }
+      
+      // Priority 5: Look for Google Drive file links in the text content
       if (!downloadUrl) {
         const gdriveFileLinkMatch = textContent.match(/https:\/\/drive\.google\.com\/file\/d\/[a-zA-Z0-9_-]+(?:\/view)?(?:\?usp=sharing)?/);
         if (gdriveFileLinkMatch) {
@@ -151,7 +186,7 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
         }
       }
       
-      // Priority 3: Look for other Google Drive patterns
+      // Priority 6: Look for other Google Drive patterns
       if (!downloadUrl) {
         // Check for uc?id= download links
         const gdriveUcLinkMatch = textContent.match(/https:\/\/drive\.google\.com\/uc\?[^\s\)]*id=([a-zA-Z0-9_-]+)/);
@@ -163,14 +198,6 @@ export class ApprovedDtxStrategy extends BaseScrapingStrategy {
           if (gdriveOpenLinkMatch) {
             downloadUrl = gdriveOpenLinkMatch[0];
           }
-        }
-      }
-      
-      // Priority 4: Look for download links in common markdown/text patterns
-      if (!downloadUrl) {
-        const dlLinkMatch = textContent.match(/\[DL\]\s*\(([^)]+)\)/);
-        if (dlLinkMatch) {
-          downloadUrl = dlLinkMatch[1];
         }
       }
       

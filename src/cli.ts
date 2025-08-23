@@ -187,6 +187,72 @@ program
   });
 
 program
+  .command('scrape-url')
+  .description('Scrape charts from a specific URL')
+  .argument('<url>', 'URL to scrape from')
+  .option('-s, --source <name>', 'Treat as this source type (e.g., "approved-dtx")', 'approved-dtx')
+  .option('--dry-run', 'Show what would be scraped without actually scraping')
+  .action(async (url: string, options: { source: string; dryRun?: boolean }) => {
+    try {
+      console.log('🎯 DTX Download - Direct URL scraping...\n');
+      
+      const service = await initializeScrapingService();
+      const sources = service.getAllSupportedSources();
+      const sourceConfig = sources.find(s => s.name === options.source);
+      
+      if (!sourceConfig) {
+        console.error(`❌ Source '${options.source}' not found`);
+        console.log('Available sources:', sources.map(s => s.name).join(', '));
+        process.exit(1);
+      }
+      
+      if (options.dryRun) {
+        console.log(`🔍 [DRY RUN] Would scrape URL: ${url}`);
+        console.log(`🏷️  As source type: ${options.source}`);
+        console.log(`📋 Strategy: ${sourceConfig.strategy}`);
+        return;
+      }
+      
+      console.log(`🔍 Scraping URL: ${url}`);
+      console.log(`🏷️  Source type: ${options.source}`);
+      console.log(`📋 Strategy: ${sourceConfig.strategy}`);
+      
+      // Create a temporary source for this URL
+      const tempSource: Source = {
+        ...sourceConfig,
+        baseUrl: url,
+        name: `${options.source}-direct`
+      };
+      
+      const result = await service.scrapeSource(tempSource);
+      
+      console.log(`\n✅ Direct URL scraping completed:`);
+      console.log(`   📊 Charts found: ${result.chartsFound}`);
+      console.log(`   ➕ Charts added: ${result.chartsAdded}`);
+      console.log(`   🔄 Duplicates: ${result.chartsDuplicated}`);
+      console.log(`   ⏱️  Duration: ${(result.duration / 1000).toFixed(2)}s`);
+      
+      if (result.errors.length > 0) {
+        console.log(`   ⚠️  Errors: ${result.errors.length}`);
+        result.errors.forEach((error: string) => console.log(`      - ${error}`));
+      }
+      
+      // Show details of found charts
+      if (result.chartsFound > 0) {
+        console.log('\n📊 Charts details:');
+        // We'd need to modify the service to return chart details for this
+      }
+      
+      // Close database connection
+      service.close();
+      
+    } catch (error) {
+      console.error('❌ Direct URL scraping failed:', error);
+      process.exit(1);
+    }
+  });
+
+program
   .command('list-sources')
   .description('List all available sources')
   .action(async () => {

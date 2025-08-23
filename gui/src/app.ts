@@ -12,7 +12,8 @@ import { DOMUtils } from './utils/DOMUtils.js';
 import { eventBus } from './utils/EventBus.js';
 import { Chart } from './types/index.js';
 import { convertChartResponsesToCharts } from './utils/typeConversion.js';
-import { DownloadRequest } from '@shared/models.js';
+import { DownloadRequest } from '../../shared/models.js';
+import { getDownloadProviderInfo, getProviderDisplayName, DownloadProvider, detectDownloadProvider } from './utils/downloadProviderUtils.js';
 
 export class DTXDownloadManager {
     private chartManager: ChartManager;
@@ -74,6 +75,7 @@ export class DTXDownloadManager {
         });
         
         DOMUtils.addEventListener('artistFilter', 'change', () => this.applyFilters());
+        DOMUtils.addEventListener('providerFilter', 'change', () => this.applyFilters());
         DOMUtils.addEventListener('clearFilters', 'click', () => this.clearFilters());
         
         // View controls
@@ -208,12 +210,13 @@ export class DTXDownloadManager {
 
     private applyFilters(): void {
         const artist = DOMUtils.getValue('artistFilter');
+        const provider = DOMUtils.getValue('providerFilter');
         const bpmMin = parseInt(DOMUtils.getValue('bpmMin')) || undefined;
         const bpmMax = parseInt(DOMUtils.getValue('bpmMax')) || undefined;
         const diffMin = parseFloat(DOMUtils.getValue('diffMin')) || undefined;
         const diffMax = parseFloat(DOMUtils.getValue('diffMax')) || undefined;
 
-        this.chartManager.applyFilters({ artist, bpmMin, bpmMax, diffMin, diffMax });
+        this.chartManager.applyFilters({ artist, provider, bpmMin, bpmMax, diffMin, diffMax });
         this.uiStateManager.resetInfiniteScroll();
         this.renderCharts();
     }
@@ -221,6 +224,7 @@ export class DTXDownloadManager {
     private clearFilters(): void {
         DOMUtils.setValue('searchInput', '');
         DOMUtils.setValue('artistFilter', '');
+        DOMUtils.setValue('providerFilter', '');
         DOMUtils.setValue('bpmMin', '');
         DOMUtils.setValue('bpmMax', '');
         DOMUtils.setValue('diffMin', '');
@@ -307,6 +311,7 @@ export class DTXDownloadManager {
                 <div class="hide-mobile">Artist</div>
                 <div class="hide-mobile">BPM</div>
                 <div>Difficulty</div>
+                <div class="hide-mobile">Download Source</div>
             </div>
         `;
         
@@ -319,6 +324,10 @@ export class DTXDownloadManager {
     private createChartCardHTML(chart: Chart): string {
         const isSelected = this.selectionManager.isSelected(chart.id);
         const imageUrl = chart.previewImageUrl || chart.imageUrl || this.getPlaceholderImage();
+        
+        // Detect download provider from URL
+        const provider = detectDownloadProvider(chart.downloadUrl);
+        const providerInfo = getDownloadProviderInfo(provider);
         
         return `
             <div class="chart-card ${isSelected ? 'selected' : ''}" data-chart-id="${chart.id}">
@@ -338,6 +347,11 @@ export class DTXDownloadManager {
                             ${chart.difficulties.map(diff => `<span class="difficulty-badge">${diff}</span>`).join('')}
                         </div>
                     </div>
+                    <div class="chart-provider">
+                        <i class="${providerInfo.icon}" style="color: ${providerInfo.color}"></i>
+                        <span class="provider-name" title="${providerInfo.description}">${getProviderDisplayName(providerInfo.provider)}</span>
+                        <span class="provider-support ${providerInfo.supportLevel.toLowerCase()}" title="Support Level: ${providerInfo.supportLevel}">${providerInfo.supportLevel}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -346,6 +360,10 @@ export class DTXDownloadManager {
     private createListItemHTML(chart: Chart): string {
         const isSelected = this.selectionManager.isSelected(chart.id);
         const imageUrl = chart.previewImageUrl || chart.imageUrl || this.getPlaceholderImage(60);
+        
+        // Detect download provider from URL
+        const provider = detectDownloadProvider(chart.downloadUrl);
+        const providerInfo = getDownloadProviderInfo(provider);
         
         return `
             <div class="list-item ${isSelected ? 'selected' : ''}" data-chart-id="${chart.id}">
@@ -358,6 +376,10 @@ export class DTXDownloadManager {
                 <div class="list-artist hide-mobile" title="${chart.artist}">${chart.artist}</div>
                 <div class="hide-mobile">${chart.bpm} BPM</div>
                 <div>${chart.difficulties.join(' / ')}</div>
+                <div class="list-provider hide-mobile">
+                    <i class="${providerInfo.icon}" style="color: ${providerInfo.color}"></i>
+                    <span class="provider-name" title="${providerInfo.description}">${getProviderDisplayName(providerInfo.provider)}</span>
+                </div>
             </div>
         `;
     }

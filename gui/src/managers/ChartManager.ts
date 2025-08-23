@@ -5,6 +5,7 @@
 import { Chart, ValidationResult, FilterConfig } from '../types/index.js';
 import { StorageService } from '../services/StorageService.js';
 import { eventBus } from '../utils/EventBus.js';
+import { detectDownloadProvider } from '../utils/downloadProviderUtils.js';
 
 export class ChartManager {
     private charts: Chart[] = [];
@@ -100,6 +101,7 @@ export class ChartManager {
         bpmMax: number;
         diffMin: number;
         diffMax: number;
+        provider: string;
     }>): void {
         let filtered = [...this.charts];
 
@@ -131,6 +133,13 @@ export class ChartManager {
             
             if (filters.diffMax !== undefined) {
                 filtered = filtered.filter(chart => Math.min(...chart.difficulties) <= filters.diffMax!);
+            }
+            
+            if (filters.provider) {
+                filtered = filtered.filter(chart => {
+                    const provider = detectDownloadProvider(chart.downloadUrl);
+                    return provider === filters.provider;
+                });
             }
         }
 
